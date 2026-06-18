@@ -5,6 +5,9 @@
 node_modules/
 npm-debug.log*
 
+# 빌드 중간 산출물 (apps-script/Index.html 은 커밋 대상)
+build/
+
 # OS
 .DS_Store
 Thumbs.db

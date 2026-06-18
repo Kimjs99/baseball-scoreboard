@@ -1,0 +1,13 @@
+{
+  "name": "baseball-scoreboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "야구 스코어보드 - Google Apps Script 웹앱",
+  "scripts": {
+    "build": "node build.cjs"
+  },
+  "devDependencies": {
+    "@babel/standalone": "^7.24.0",
+    "tailwindcss": "^3.4.0"
+  }
+}
