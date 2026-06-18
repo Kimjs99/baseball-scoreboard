@@ -46,6 +46,18 @@ clasp open-web-app          # 배포된 앱 열기
 화면의 **결과 저장 → 구글 시트로 전송**을 누르면 배포 계정에 자동 생성된
 `야구 스코어보드 경기기록` 스프레드시트에 경기요약·타자기록이 누적 저장됩니다.
 
+## 배포 링크 & 연결 리소스
+
+| 구분 | URL / ID | 비고 |
+|---|---|---|
+| 웹앱 (버전 배포, 공유용) | `https://script.google.com/macros/s/AKfycbwm3qR95v8sA6q6zMFzaLKOi78R1cldZNc__1V8eUkXG5-8s_0t_qVaeEaD5ZWV6WGm/exec` | 배포 ID `AKfycbwm3qR9...`, 현재 버전 `@4`. URL 고정, 공유용 |
+| 웹앱 (`@HEAD`, 개발/테스트용) | `https://script.google.com/macros/s/AKfycbwV0kZpbbfyEZq42cdlguCym84ATMCzEEnP7oRhf5Q/exec` | 배포 ID `AKfycbwV0...`, `clasp push` 시 최신 코드 자동 반영 |
+| 결과 저장 구글 시트 | `https://docs.google.com/spreadsheets/d/1icZKDgE0YS--CebK1v7nhvERZVkXhFGzQUAwXZkK0ZQ/edit` | 파일명 `야구 스코어보드 경기기록`. Script Properties `RESULT_SPREADSHEET_ID`에 캐시 |
+| Apps Script 스크립트 ID | `15qf7wDFkRgNi_wIR-iTw401u6HQQLC6fV_XiVLwjbYZaAaXyMjU8Jy35` | `.clasp.json` 참조 |
+
+- 버전 배포 갱신: `clasp push` 후 `clasp redeploy AKfycbwm3qR9...` (URL 유지, 새 버전으로 덮어쓰기)
+- 배포 목록 확인: `clasp list-deployments`
+
 ## 백엔드 동작 메모
 
 - `doPost`는 프론트엔드가 `mode:'no-cors'`로 보내는 JSON을 `e.postData.contents`에서 읽습니다.

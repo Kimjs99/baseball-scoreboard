@@ -158,22 +158,26 @@ const { useState } = React;
       };
 
       // --- 이벤트 핸들러 ---
+      // 볼넷/사구/실책 출루 등 '1루 진루권' 부여 시 강제 진루(밀어내기) 계산
+      const computeForcedWalk = (b) => {
+        let runsScored = 0;
+        const nb = { ...b };
+        if (b.first && b.second && b.third) {
+          runsScored = 1;            // 만루 → 밀어내기 득점
+        } else if (b.first && b.second) {
+          nb.third = true;
+        } else if (b.first) {
+          nb.second = true;
+        }
+        nb.first = true;
+        return { nb, runsScored };
+      };
+
       const handleBall = () => {
         saveHistory();
         if (balls + 1 === 4) {
-          let runsScored = 0;
-          const newBases = { ...bases };
-
-          if (bases.first && bases.second && bases.third) {
-            runsScored = 1;
-          } else if (bases.first && bases.second) {
-            newBases.third = true;
-          } else if (bases.first) {
-            newBases.second = true;
-          }
-          newBases.first = true;
-
-          setBases(newBases);
+          const { nb, runsScored } = computeForcedWalk(bases);
+          setBases(nb);
           updateStats(runsScored, false, false);
           advanceBatter();
         } else {
@@ -235,6 +239,68 @@ const { useState } = React;
         saveHistory();
         updateStats(0, false, true);
         addOut();
+      };
+
+      // 볼넷(직접)·사구(몸에 맞는 공): 1루 진루권 부여, 타수·안타 모두 제외
+      const handleWalkLike = () => {
+        saveHistory();
+        const { nb, runsScored } = computeForcedWalk(bases);
+        setBases(nb);
+        updateStats(runsScored, false, false);
+        advanceBatter();
+      };
+
+      // 실책 출루(ROE): 타수 포함·안타 제외, 수비팀 실책(E) +1
+      const handleReachOnError = () => {
+        saveHistory();
+        const { nb, runsScored } = computeForcedWalk(bases);
+        setBases(nb);
+        updateStats(runsScored, false, true);
+        const defenseSetter = isTop ? setHomeTeam : setAwayTeam;
+        defenseSetter((prev) => ({ ...prev, errors: prev.errors + 1 }));
+        advanceBatter();
+      };
+
+      // 야수선택(FC): 타자는 1루 출루(타수 포함·안타 제외), 다른 주자가 아웃되어 아웃 +1
+      const handleFieldersChoice = () => {
+        saveHistory();
+        updateStats(0, false, true);
+        setBases((prev) => ({ ...prev, first: true }));
+        addOut();
+      };
+
+      // 희생플라이(SF): 3루 주자 태그업 득점 → 타수 제외(희생타). 득점 없으면 일반 뜬공(타수 포함)
+      const handleSacFly = () => {
+        saveHistory();
+        const scored = bases.third;
+        if (scored) setBases((prev) => ({ ...prev, third: false }));
+        updateStats(scored ? 1 : 0, false, !scored);
+        addOut();
+      };
+
+      // 희생번트(SAC): 타자 아웃(타수 제외), 주자 한 베이스씩 진루(3루 주자는 득점=스퀴즈)
+      const handleSacBunt = () => {
+        saveHistory();
+        let runsScored = 0;
+        const nb = { first: false, second: false, third: false };
+        if (bases.third) runsScored += 1;
+        if (bases.second) nb.third = true;
+        if (bases.first) nb.second = true;
+        setBases(nb);
+        updateStats(runsScored, false, false);
+        addOut();
+      };
+
+      // 주자 수동 토글(도루·폭투·견제사·태그업 등 예외 상황 직접 반영)
+      const toggleBase = (base) => {
+        saveHistory();
+        setBases((prev) => ({ ...prev, [base]: !prev[base] }));
+      };
+
+      // 수동 득점 +1 (현재 공격 팀, 현재 이닝에 가산)
+      const addManualRun = () => {
+        saveHistory();
+        updateStats(1, false, false);
       };
 
       const handleUndo = () => {
@@ -551,6 +617,31 @@ const { useState } = React;
                    </button>
                    <button onClick={resetGame} className="py-3 px-4 bg-gray-900 hover:bg-black text-gray-500 font-bold rounded-xl border border-gray-800 transition-colors">게임 리셋</button>
                 </div>
+              </div>
+
+              {/* 특수 상황 (SPECIAL) */}
+              <div className="mt-6 pt-5 border-t border-gray-700">
+                <div className="text-sm text-gray-400 mb-3 font-semibold tracking-wider">특수 상황 (SPECIAL)</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <button onClick={handleWalkLike} className="py-3 px-3 bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 font-bold rounded-xl border border-emerald-700 transition-colors text-sm">볼넷 (BB)</button>
+                  <button onClick={handleWalkLike} className="py-3 px-3 bg-teal-900/50 hover:bg-teal-800 text-teal-300 font-bold rounded-xl border border-teal-700 transition-colors text-sm">사구 (HBP)</button>
+                  <button onClick={handleFieldersChoice} className="py-3 px-3 bg-indigo-900/50 hover:bg-indigo-800 text-indigo-300 font-bold rounded-xl border border-indigo-700 transition-colors text-sm">야수선택 (FC)</button>
+                  <button onClick={handleReachOnError} className="py-3 px-3 bg-rose-900/50 hover:bg-rose-800 text-rose-300 font-bold rounded-xl border border-rose-700 transition-colors text-sm">실책 출루 (ROE)</button>
+                  <button onClick={handleSacFly} className="py-3 px-3 bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 font-bold rounded-xl border border-cyan-700 transition-colors text-sm">희생플라이 (SF)</button>
+                  <button onClick={handleSacBunt} className="py-3 px-3 bg-sky-900/50 hover:bg-sky-800 text-sky-300 font-bold rounded-xl border border-sky-700 transition-colors text-sm">희생번트 (SAC)</button>
+                </div>
+              </div>
+
+              {/* 주자 / 득점 수동 조정 (RUNNERS) */}
+              <div className="mt-5 pt-5 border-t border-gray-700">
+                <div className="text-sm text-gray-400 mb-3 font-semibold tracking-wider">주자 / 득점 수동 조정 (RUNNERS)</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <button onClick={() => toggleBase('first')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.first ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>1루 주자</button>
+                  <button onClick={() => toggleBase('second')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.second ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>2루 주자</button>
+                  <button onClick={() => toggleBase('third')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.third ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>3루 주자</button>
+                  <button onClick={addManualRun} className="py-3 px-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl border border-amber-500 transition-colors text-sm">득점 +1</button>
+                </div>
+                <p className="text-xs text-gray-500 mt-3 leading-relaxed">💡 도루·폭투·견제사·태그업 등은 베이스 주자를 직접 켜고/끄고, 득점이 나면 [득점 +1]로 반영하세요. 모든 동작은 되돌리기(Undo)로 취소됩니다.</p>
               </div>
             </div>
 
