@@ -13,6 +13,20 @@ var SUMMARY_SHEET = '경기요약';
 var BATTER_SHEET = '타자기록';
 
 /**
+ * 최초 1회 권한 승인용 헬퍼.
+ * Apps Script 에디터에서 이 함수를 한 번 실행하면 웹앱이 사용하는 모든 스코프
+ * (SpreadsheetApp / PropertiesService / ScriptApp)에 대한 OAuth 동의가 부여되어,
+ * 익명(ANYONE_ANONYMOUS) 접근 시 발생하던 403 / doPost 권한 오류가 해소된다.
+ */
+function authorize() {
+  var ss = getResultSpreadsheet_();           // SpreadsheetApp + PropertiesService 스코프
+  var url = ScriptApp.getService().getUrl();   // ScriptApp 스코프
+  Logger.log('결과 시트: ' + ss.getUrl());
+  Logger.log('웹앱 URL: ' + url);
+  return '권한 승인 완료';
+}
+
+/**
  * 스코어보드 화면 서빙.
  */
 function doGet() {
