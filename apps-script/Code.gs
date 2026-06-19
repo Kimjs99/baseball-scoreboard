@@ -76,7 +76,7 @@ function saveGameResult_(data) {
 
   // 2) 타자 기록: 선수 한 명당 한 줄
   var batters = getOrCreateSheet_(ss, BATTER_SHEET, [
-    '일시', '팀명', '타순', '이름', '타수', '안타', '타율'
+    '일시', '팀명', '타순', '이름', '타수', '안타', '타율', '타점'
   ]);
   appendLineup_(batters, date, away);
   appendLineup_(batters, date, home);
@@ -104,7 +104,8 @@ function appendLineup_(sheet, date, team) {
       b.name,
       b.atBats || 0,
       b.hits || 0,
-      formatAvg_(b.hits || 0, b.atBats || 0)
+      formatAvg_(b.hits || 0, b.atBats || 0),
+      b.rbi || 0
     ]);
   }
 }
@@ -143,6 +144,17 @@ function getOrCreateSheet_(ss, name, header) {
     var first = ss.getSheets()[0];
     if (first.getName() !== name && first.getLastRow() === 0) {
       ss.deleteSheet(first);
+    }
+  } else {
+    // 헤더 보정: 컬럼이 추가/변경된 경우(예: '타점' 추가) 1행 헤더를 최신 스키마로 갱신
+    var current = sheet.getRange(1, 1, 1, header.length).getValues()[0];
+    var mismatch = false;
+    for (var i = 0; i < header.length; i++) {
+      if (current[i] !== header[i]) { mismatch = true; break; }
+    }
+    if (mismatch) {
+      sheet.getRange(1, 1, 1, header.length).setValues([header]);
+      sheet.setFrozenRows(1);
     }
   }
   return sheet;

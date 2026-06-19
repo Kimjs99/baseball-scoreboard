@@ -10,14 +10,22 @@ const { useState } = React;
       return avg.startsWith('0.') ? avg.substring(1) : avg;
     };
 
-    // 유틸리티: 초기 라인업 생성 (15명 기준)
+    // 타순 정원 최대치(내부 버퍼). 실제 사용 인원은 rosterSize로 조절.
+    const MAX_ROSTER = 20;
+
+    // 유틸리티: 초기 라인업 생성 (MAX_ROSTER명 버퍼)
+    // atBats/hits/rbi: 이번 경기 누계, seasonXxx: 종료된 이전 경기들의 누적(전체)
     const generateLineup = (prefix) => {
-      return Array.from({ length: 15 }, (_, i) => ({
+      return Array.from({ length: MAX_ROSTER }, (_, i) => ({
         id: i,
         order: i + 1,
         name: `${prefix} 타자 ${i + 1}`,
         atBats: 0,
         hits: 0,
+        rbi: 0,
+        seasonAtBats: 0,
+        seasonHits: 0,
+        seasonRbi: 0,
       }));
     };
 
@@ -51,6 +59,21 @@ const { useState } = React;
       const [outs, setOuts] = useState(0);
       const [bases, setBases] = useState({ first: false, second: false, third: false });
 
+      // 경기 규칙 설정 (팀 설정에서 변경)
+      const [maxInnings, setMaxInnings] = useState(9);
+      const [outsPerInning, setOutsPerInning] = useState(3);
+      const [rosterSize, setRosterSize] = useState(9);
+
+      // 경기 종료 여부 (강제 종료 시 true → 액션 패널 잠금)
+      const [gameOver, setGameOver] = useState(false);
+
+      // 라인업/리더보드 통계 보기 범위 ('game': 이번 경기 / 'season': 전체 누적)
+      const [statView, setStatView] = useState('game');
+      // 리더보드 정렬 기준 ('avg' | 'hits' | 'rbi')
+      const [leaderSort, setLeaderSort] = useState('avg');
+      // 현재 페이지 ('board': 스코어보드 / 'leaders': 리더보드)
+      const [page, setPage] = useState('board');
+
       // 상태 기록 저장소 (Undo용)
       const [history, setHistory] = useState([]);
 
@@ -60,8 +83,11 @@ const { useState } = React;
       const [tempAwayName, setTempAwayName] = useState('');
       const [tempHomeName, setTempHomeName] = useState('');
       const [settingsTab, setSettingsTab] = useState('manual');
-      const [tempAwayLineup, setTempAwayLineup] = useState(Array(15).fill(''));
-      const [tempHomeLineup, setTempHomeLineup] = useState(Array(15).fill(''));
+      const [tempAwayLineup, setTempAwayLineup] = useState(Array(MAX_ROSTER).fill(''));
+      const [tempHomeLineup, setTempHomeLineup] = useState(Array(MAX_ROSTER).fill(''));
+      const [tempMaxInnings, setTempMaxInnings] = useState(9);
+      const [tempOutsPerInning, setTempOutsPerInning] = useState(3);
+      const [tempRosterSize, setTempRosterSize] = useState(9);
 
       // 결과 내보내기(저장) 상태
       const [isExportOpen, setIsExportOpen] = useState(false);
@@ -105,7 +131,7 @@ const { useState } = React;
         const teamSetter = isTop ? setAwayTeam : setHomeTeam;
         teamSetter((prev) => ({
           ...prev,
-          currentBatter: (prev.currentBatter + 1) % 15,
+          currentBatter: (prev.currentBatter + 1) % rosterSize,
         }));
         setBalls(0);
         setStrikes(0);
@@ -123,8 +149,8 @@ const { useState } = React;
       };
 
       const addOut = () => {
-        if (outs + 1 >= 3) {
-          // 3아웃: 다음에 이 팀이 공격할 때 다음 타자부터 시작하도록 타순을 먼저 넘긴 뒤 이닝 교체
+        if (outs + 1 >= outsPerInning) {
+          // 마지막 아웃: 다음에 이 팀이 공격할 때 다음 타자부터 시작하도록 타순을 먼저 넘긴 뒤 이닝 교체
           advanceBatter();
           switchInning();
         } else {
@@ -133,7 +159,7 @@ const { useState } = React;
         }
       };
 
-      const updateStats = (runsScored, isHit, isAtBat) => {
+      const updateStats = (runsScored, isHit, isAtBat, rbi = 0) => {
         const teamSetter = isTop ? setAwayTeam : setHomeTeam;
 
         teamSetter((prev) => {
@@ -145,6 +171,7 @@ const { useState } = React;
           const batter = { ...newLineup[prev.currentBatter] };
           if (isAtBat) batter.atBats += 1;
           if (isHit) batter.hits += 1;
+          if (rbi) batter.rbi += rbi;
           newLineup[prev.currentBatter] = batter;
 
           return {
@@ -178,7 +205,7 @@ const { useState } = React;
         if (balls + 1 === 4) {
           const { nb, runsScored } = computeForcedWalk(bases);
           setBases(nb);
-          updateStats(runsScored, false, false);
+          updateStats(runsScored, false, false, runsScored); // 만루 밀어내기 득점은 타점
           advanceBatter();
         } else {
           setBalls(balls + 1);
@@ -231,7 +258,7 @@ const { useState } = React;
         }
 
         setBases(newBases);
-        updateStats(runsScored, true, true);
+        updateStats(runsScored, true, true, runsScored); // 안타로 들어온 득점은 모두 타점
         advanceBatter();
       };
 
@@ -246,7 +273,7 @@ const { useState } = React;
         saveHistory();
         const { nb, runsScored } = computeForcedWalk(bases);
         setBases(nb);
-        updateStats(runsScored, false, false);
+        updateStats(runsScored, false, false, runsScored); // 만루 밀어내기 득점은 타점
         advanceBatter();
       };
 
@@ -274,7 +301,7 @@ const { useState } = React;
         saveHistory();
         const scored = bases.third;
         if (scored) setBases((prev) => ({ ...prev, third: false }));
-        updateStats(scored ? 1 : 0, false, !scored);
+        updateStats(scored ? 1 : 0, false, !scored, scored ? 1 : 0); // 희생플라이 득점은 타점
         addOut();
       };
 
@@ -287,7 +314,7 @@ const { useState } = React;
         if (bases.second) nb.third = true;
         if (bases.first) nb.second = true;
         setBases(nb);
-        updateStats(runsScored, false, false);
+        updateStats(runsScored, false, false, runsScored); // 스퀴즈 득점은 타점
         addOut();
       };
 
@@ -317,26 +344,67 @@ const { useState } = React;
         setHistory((prev) => prev.slice(0, -1));
       };
 
-      const resetGame = () => {
-        showConfirm("게임을 정말로 초기화하시겠습니까?", () => {
-          setInning(1);
-          setIsTop(true);
-          setBalls(0);
-          setStrikes(0);
-          setOuts(0);
-          setBases({ first: false, second: false, third: false });
-          setAwayTeam((prev) => ({ ...prev, scores: Array(9).fill(0), runs: 0, hits: 0, errors: 0, currentBatter: 0 }));
-          setHomeTeam((prev) => ({ ...prev, scores: Array(9).fill(0), runs: 0, hits: 0, errors: 0, currentBatter: 0 }));
-          setHistory([]);
+      // 경기 강제 종료: 현재 기록을 확정(잠금)하고 결과 저장 모달을 연다.
+      // 이번 경기 기록은 [새 경기]를 누르기 전까지 화면에 그대로 유지된다.
+      const endGame = () => {
+        if (gameOver) { setIsExportOpen(true); return; }
+        showConfirm(
+          "현재 경기를 종료하고 결과를 저장하시겠습니까?\n종료하면 액션 패널이 잠기며, [새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.",
+          () => {
+            setGameOver(true);
+            setIsExportOpen(true);
+          }
+        );
+      };
+
+      // 새 경기 시작: 이번 경기 기록을 전체(누적: seasonXxx)에 합산한 뒤 경기 상태를 초기화.
+      const startNewGame = () => {
+        const foldTeam = (prev) => ({
+          ...prev,
+          scores: Array(maxInnings).fill(0),
+          runs: 0,
+          hits: 0,
+          errors: 0,
+          currentBatter: 0,
+          lineup: prev.lineup.map((b) => ({
+            ...b,
+            seasonAtBats: b.seasonAtBats + b.atBats,
+            seasonHits: b.seasonHits + b.hits,
+            seasonRbi: b.seasonRbi + b.rbi,
+            atBats: 0,
+            hits: 0,
+            rbi: 0,
+          })),
         });
+        setInning(1);
+        setIsTop(true);
+        setBalls(0);
+        setStrikes(0);
+        setOuts(0);
+        setBases({ first: false, second: false, third: false });
+        setAwayTeam(foldTeam);
+        setHomeTeam(foldTeam);
+        setHistory([]);
+        setGameOver(false);
+      };
+
+      const resetGame = () => {
+        showConfirm(
+          "이번 경기 기록을 전체(누적)에 반영하고 새 경기를 시작할까요?",
+          startNewGame
+        );
       };
 
       // --- 명단 및 설정 처리 로직 ---
       const openSettings = () => {
         setTempAwayName(awayTeam.name);
         setTempHomeName(homeTeam.name);
-        setTempAwayLineup(awayTeam.lineup.map(b => b.name));
-        setTempHomeLineup(homeTeam.lineup.map(b => b.name));
+        // 기본 자동 이름(예: "어웨이 타자 1")은 빈 칸으로 두고 placeholder로만 노출 → 클릭 시 바로 입력
+        setTempAwayLineup(awayTeam.lineup.map((b, i) => b.name === `어웨이 타자 ${i + 1}` ? '' : b.name));
+        setTempHomeLineup(homeTeam.lineup.map((b, i) => b.name === `홈 타자 ${i + 1}` ? '' : b.name));
+        setTempMaxInnings(maxInnings);
+        setTempOutsPerInning(outsPerInning);
+        setTempRosterSize(rosterSize);
         setIsSettingsOpen(true);
       };
 
@@ -362,7 +430,7 @@ const { useState } = React;
 
               if (isNaN(order) || order < 1 || order > 15) return;
 
-              const batter = { id: order - 1, order, name: name.trim(), atBats: 0, hits: 0 };
+              const batter = { id: order - 1, order, name: name.trim(), atBats: 0, hits: 0, rbi: 0, seasonAtBats: 0, seasonHits: 0, seasonRbi: 0 };
 
               if (team === 'AWAY') newAwayLineup[order - 1] = batter;
               if (team === 'HOME') newHomeLineup[order - 1] = batter;
@@ -381,24 +449,37 @@ const { useState } = React;
           parsedHomeLineup = parsedHomeLineup.map((b, i) => ({ ...b, name: tempHomeLineup[i] || `홈 타자 ${i+1}` }));
         }
 
-        setAwayTeam(prev => ({ ...prev, name: tempAwayName || 'AWAY', lineup: parsedAwayLineup }));
-        setHomeTeam(prev => ({ ...prev, name: tempHomeName || 'HOME', lineup: parsedHomeLineup }));
+        // 경기 규칙(이닝 수 / 아웃 카운트 / 타자 수) 적용 — 범위 보정
+        const safeInnings = Math.min(30, Math.max(1, parseInt(tempMaxInnings, 10) || 9));
+        const safeOuts = Math.min(10, Math.max(1, parseInt(tempOutsPerInning, 10) || 3));
+        const safeRoster = Math.min(MAX_ROSTER, Math.max(1, parseInt(tempRosterSize, 10) || 9));
+        setMaxInnings(safeInnings);
+        setOutsPerInning(safeOuts);
+        setRosterSize(safeRoster);
+
+        // 타자 수가 줄어든 경우 현재 타순이 범위를 벗어나지 않도록 보정
+        setAwayTeam(prev => ({ ...prev, name: tempAwayName || 'AWAY', lineup: parsedAwayLineup, currentBatter: prev.currentBatter % safeRoster }));
+        setHomeTeam(prev => ({ ...prev, name: tempHomeName || 'HOME', lineup: parsedHomeLineup, currentBatter: prev.currentBatter % safeRoster }));
         setIsSettingsOpen(false);
       };
 
       // --- 결과 내보내기(저장) 로직 ---
       const handleExportCSV = () => {
-        let csvContent = "data:text/csv;charset=utf-8,﻿";
-        csvContent += "구분,1,2,3,4,5,6,7,8,9,R,H,E\n";
-        csvContent += `${awayTeam.name},${awayTeam.scores.slice(0,9).join(',')},${awayTeam.runs},${awayTeam.hits},${awayTeam.errors}\n`;
-        csvContent += `${homeTeam.name},${homeTeam.scores.slice(0,9).join(',')},${homeTeam.runs},${homeTeam.hits},${homeTeam.errors}\n\n`;
+        const nCols = Math.max(maxInnings, awayTeam.scores.length, homeTeam.scores.length);
+        const inningHeader = Array.from({ length: nCols }, (_, i) => i + 1).join(',');
+        const scoreCells = (t) => Array.from({ length: nCols }, (_, i) => t.scores[i] || 0).join(',');
 
-        csvContent += "팀,타순,이름,타수,안타,타율\n";
-        awayTeam.lineup.forEach(b => {
-          csvContent += `${awayTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)}\n`;
+        let csvContent = "data:text/csv;charset=utf-8,﻿";
+        csvContent += `구분,${inningHeader},R,H,E\n`;
+        csvContent += `${awayTeam.name},${scoreCells(awayTeam)},${awayTeam.runs},${awayTeam.hits},${awayTeam.errors}\n`;
+        csvContent += `${homeTeam.name},${scoreCells(homeTeam)},${homeTeam.runs},${homeTeam.hits},${homeTeam.errors}\n\n`;
+
+        csvContent += "팀,타순,이름,타수,안타,타율,타점\n";
+        awayTeam.lineup.slice(0, rosterSize).forEach(b => {
+          csvContent += `${awayTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)},${b.rbi}\n`;
         });
-        homeTeam.lineup.forEach(b => {
-          csvContent += `${homeTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)}\n`;
+        homeTeam.lineup.slice(0, rosterSize).forEach(b => {
+          csvContent += `${homeTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)},${b.rbi}\n`;
         });
 
         const encodedUri = encodeURI(csvContent);
@@ -417,8 +498,8 @@ const { useState } = React;
         }
         const payload = {
           date: new Date().toLocaleString(),
-          awayTeam: { name: awayTeam.name, runs: awayTeam.runs, hits: awayTeam.hits, scores: awayTeam.scores, lineup: awayTeam.lineup },
-          homeTeam: { name: homeTeam.name, runs: homeTeam.runs, hits: homeTeam.hits, scores: homeTeam.scores, lineup: homeTeam.lineup }
+          awayTeam: { name: awayTeam.name, runs: awayTeam.runs, hits: awayTeam.hits, scores: awayTeam.scores, lineup: awayTeam.lineup.slice(0, rosterSize) },
+          homeTeam: { name: homeTeam.name, runs: homeTeam.runs, hits: homeTeam.hits, scores: homeTeam.scores, lineup: homeTeam.lineup.slice(0, rosterSize) }
         };
         try {
           await fetch(webhookUrl, {
@@ -435,21 +516,105 @@ const { useState } = React;
       };
 
       // --- UI 렌더링 ---
-      const displayInnings = Math.max(9, inning);
+      const displayInnings = Math.max(maxInnings, inning);
       const inningColumns = Array.from({ length: displayInnings }, (_, i) => i + 1);
+
+      // 라인업/리더보드용 통계 계산 (statView에 따라 이번 경기 또는 전체 누적)
+      const viewStat = (b) => statView === 'season'
+        ? { ab: b.seasonAtBats + b.atBats, h: b.seasonHits + b.hits, r: b.seasonRbi + b.rbi }
+        : { ab: b.atBats, h: b.hits, r: b.rbi };
+
+      // 리더보드: 양 팀 선수를 합쳐 정렬
+      const leaderboard = [
+        ...awayTeam.lineup.slice(0, rosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: awayTeam.name, side: 'away' })),
+        ...homeTeam.lineup.slice(0, rosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: homeTeam.name, side: 'home' })),
+      ]
+        .filter((p) => p.ab > 0 || p.h > 0 || p.r > 0)
+        .sort((a, b) => {
+          if (leaderSort === 'hits') return b.h - a.h || b.r - a.r;
+          if (leaderSort === 'rbi') return b.r - a.r || b.h - a.h;
+          // 타율: 규정타석 개념이 없으므로 타수 0은 뒤로
+          const avgA = a.ab > 0 ? a.h / a.ab : -1;
+          const avgB = b.ab > 0 ? b.h / b.ab : -1;
+          return avgB - avgA || b.h - a.h;
+        });
+
+      // 라인업 기록 카드(좌:어웨이 / 우:홈 사이드 레일에 사용)
+      const renderLineupCard = (team, accent) => (
+        <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className={`font-bold text-sm ${accent}`}>{team.name}</h3>
+            <div className="flex gap-1 bg-gray-900 p-0.5 rounded-lg">
+              <button onClick={() => setStatView('game')} className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${statView === 'game' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>이번</button>
+              <button onClick={() => setStatView('season')} className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors ${statView === 'season' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>누적</button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-700">
+                  <th className="text-left py-1.5 px-1 font-semibold">#</th>
+                  <th className="text-left py-1.5 px-1 font-semibold">이름</th>
+                  <th className="py-1.5 px-1 font-semibold">타수</th>
+                  <th className="py-1.5 px-1 font-semibold">안타</th>
+                  <th className="py-1.5 px-1 font-semibold text-yellow-400">타율</th>
+                  <th className="py-1.5 px-1 font-semibold text-yellow-400">타점</th>
+                </tr>
+              </thead>
+              <tbody>
+                {team.lineup.slice(0, rosterSize).map((b) => {
+                  const s = viewStat(b);
+                  const isNow = !gameOver && team === currentTeam && b.id === currentBatter.id;
+                  return (
+                    <tr key={b.id} className={`border-b border-gray-800 ${isNow ? 'bg-yellow-500/10' : ''}`}>
+                      <td className="py-1.5 px-1 text-gray-500">{b.order}</td>
+                      <td className="py-1.5 px-1 text-left truncate max-w-[6rem]">{isNow && '▶ '}{b.name}</td>
+                      <td className="py-1.5 px-1 text-center font-mono text-gray-300">{s.ab}</td>
+                      <td className="py-1.5 px-1 text-center font-mono text-gray-300">{s.h}</td>
+                      <td className="py-1.5 px-1 text-center font-mono text-white">{formatAvg(s.h, s.ab)}</td>
+                      <td className="py-1.5 px-1 text-center font-mono text-white">{s.r}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
 
       return (
         <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-8 select-none relative">
-          <div className="max-w-5xl mx-auto space-y-6">
+          <div className="max-w-7xl mx-auto space-y-6">
 
+            {/* 페이지 네비게이션 */}
+            <div className="flex gap-2 bg-gray-800 p-2 rounded-2xl border border-gray-700">
+              <button onClick={() => setPage('board')} className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${page === 'board' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>📋 스코어보드</button>
+              <button onClick={() => setPage('leaders')} className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors ${page === 'leaders' ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>🏆 리더보드</button>
+            </div>
+
+            {page === 'board' && (
+            <div className="flex flex-col xl:flex-row gap-6 items-start">
+
+            {/* 왼쪽: 어웨이 라인업 */}
+            <div className="w-full xl:w-72 shrink-0 order-2 xl:order-1">
+              {renderLineupCard(awayTeam, 'text-blue-400')}
+            </div>
+
+            {/* 가운데: 스코어보드 + 컨트롤 */}
+            <div className="flex-1 min-w-0 w-full space-y-6 order-1 xl:order-2">
             {/* 헤더 및 스코어보드 테이블 */}
             <div className="bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-xl border border-gray-700">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400">BASEBALL SCOREBOARD</h1>
                 <div className="flex items-center flex-wrap gap-4">
                   <div className="text-lg font-bold w-full md:w-auto text-right mb-2 md:mb-0">
-                    {inning}회 {isTop ? '초' : '말'}
+                    {gameOver
+                      ? <span className="text-red-400">경기 종료</span>
+                      : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span></>}
                   </div>
+                  <button onClick={endGame} className="bg-red-800 hover:bg-red-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-red-600 flex-1 md:flex-none">
+                    🏁 경기 종료
+                  </button>
                   <button onClick={() => setIsExportOpen(true)} className="bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-green-600 flex-1 md:flex-none">
                     📤 결과 저장
                   </button>
@@ -504,7 +669,7 @@ const { useState } = React;
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
               {/* 1. 카운트 (B/S/O) */}
-              <div className="bg-gray-800 p-6 rounded-2xl flex flex-col justify-center border border-gray-700">
+              <div className="bg-gray-800 p-5 rounded-2xl flex flex-col justify-center border border-gray-700">
                 <div className="space-y-4">
                   <div className="flex items-center">
                     <span className="w-8 text-xl font-bold text-green-500">B</span>
@@ -524,8 +689,8 @@ const { useState } = React;
                   </div>
                   <div className="flex items-center">
                     <span className="w-8 text-xl font-bold text-red-500">O</span>
-                    <div className="flex gap-3">
-                      {[0, 1].map((i) => (
+                    <div className="flex flex-wrap gap-3">
+                      {Array.from({ length: Math.max(1, outsPerInning - 1) }, (_, i) => i).map((i) => (
                         <div key={i} className={`w-8 h-8 rounded-full border-2 border-gray-600 ${i < outs ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-gray-700'}`} />
                       ))}
                     </div>
@@ -534,49 +699,44 @@ const { useState } = React;
               </div>
 
               {/* 2. 다이아몬드 (베이스 상태) */}
-              <div className="bg-gray-800 p-6 rounded-2xl flex items-center justify-center border border-gray-700 relative z-0">
-                <div className="grid grid-cols-3 grid-rows-3 gap-2 w-48 h-48 rotate-45 transform">
-                  <div className="col-start-1 row-start-1 w-full h-full p-2">
-                    <div className={`w-full h-full rounded-sm ${bases.second ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-600'}`}></div>
+              <div className="bg-gray-800 p-5 rounded-2xl flex items-center justify-center border border-gray-700">
+                <div className="relative w-36 h-36">
+                  {/* 내야 연결선 (다이아몬드) */}
+                  <div className="absolute left-1/2 top-1/2 w-[6.4rem] h-[6.4rem] -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-gray-600 rounded-sm"></div>
+                  {/* 2루 (상단) */}
+                  <div className={`absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rotate-45 rounded-sm ${bases.second ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-500'}`}></div>
+                  {/* 3루 (좌측) */}
+                  <div className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rotate-45 rounded-sm ${bases.third ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-500'}`}></div>
+                  {/* 1루 (우측) */}
+                  <div className={`absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-8 h-8 rotate-45 rounded-sm ${bases.first ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-500'}`}></div>
+                  {/* 홈 플레이트 (하단, 오각형) */}
+                  <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-8 h-8" style={{ filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.7))' }}>
+                    <div className="w-full h-full bg-white" style={{ clipPath: 'polygon(0% 0%, 100% 0%, 100% 55%, 50% 100%, 0% 55%)' }}></div>
                   </div>
-                  <div className="col-start-3 row-start-1 w-full h-full p-2">
-                    <div className={`w-full h-full rounded-sm ${bases.first ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-600'}`}></div>
-                  </div>
-                  <div className="col-start-1 row-start-3 w-full h-full p-2">
-                    <div className={`w-full h-full rounded-sm ${bases.third ? 'bg-yellow-400 shadow-[0_0_15px_#facc15]' : 'bg-gray-700 border-2 border-gray-600'}`}></div>
-                  </div>
-
-                  {/* 홈 플레이트 (오각형) - 회전된 컨테이너 안에서 다시 역회전하여 모양 유지 */}
-                  <div className="col-start-3 row-start-3 w-full h-full flex items-center justify-center" style={{ filter: 'drop-shadow(0 0 8px rgba(255, 255, 255, 0.8))' }}>
-                    <div className="w-full h-full bg-white" style={{ transform: 'rotate(-45deg) scale(0.9)', clipPath: 'polygon(0% 0%, 100% 0%, 100% 60%, 50% 100%, 0% 60%)' }}></div>
-                  </div>
-
-                  {/* 내야 선 (장식용) */}
-                  <div className="absolute inset-[15%] border-4 border-gray-600 -z-10 rounded-sm"></div>
                 </div>
               </div>
 
               {/* 3. 현재 타자 정보 */}
-              <div className="bg-gray-800 p-6 rounded-2xl flex flex-col justify-between border border-gray-700">
+              <div className="bg-gray-800 p-5 rounded-2xl flex flex-col justify-between border border-gray-700">
                 <div>
-                  <div className="text-sm text-gray-400 mb-1 font-semibold tracking-wider">NOW BATTING</div>
-                  <div className="text-yellow-400 font-bold text-xl mb-4">
+                  <div className="text-xs text-gray-400 mb-1 font-semibold tracking-wider">NOW BATTING</div>
+                  <div className="text-yellow-400 font-bold text-lg mb-3">
                     {currentTeam.name}
                   </div>
-                  <div className="flex items-baseline gap-3 mb-2">
-                    <span className="text-4xl font-black text-white">{currentBatter.order}번</span>
-                    <span className="text-2xl text-gray-200 truncate">{currentBatter.name}</span>
+                  <div className="flex items-baseline gap-2 mb-1 min-w-0">
+                    <span className="text-3xl font-black text-white whitespace-nowrap">{currentBatter.order}번</span>
+                    <span className="text-base text-gray-200 truncate min-w-0">{currentBatter.name}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                    <div className="text-xs text-gray-500 mb-1">AVG (타율)</div>
+                <div className="grid grid-cols-2 gap-2 mt-5">
+                  <div className="bg-gray-900 p-2.5 rounded-lg border border-gray-700 text-center">
+                    <div className="text-[10px] text-gray-500 mb-1 leading-tight">AVG<br/>(타율)</div>
                     <div className="text-2xl font-mono text-white">{formatAvg(currentBatter.hits, currentBatter.atBats)}</div>
                   </div>
-                  <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center">
-                    <div className="text-xs text-gray-500 mb-1">H / AB (안타/타수)</div>
-                    <div className="text-xl font-mono text-gray-300 mt-1">{currentBatter.hits} / {currentBatter.atBats}</div>
+                  <div className="bg-gray-900 p-2.5 rounded-lg border border-gray-700 text-center">
+                    <div className="text-[10px] text-gray-500 mb-1 leading-tight">H / AB<br/>(안타/타수)</div>
+                    <div className="text-xl font-mono text-gray-300 whitespace-nowrap">{currentBatter.hits} / {currentBatter.atBats}</div>
                   </div>
                 </div>
               </div>
@@ -584,8 +744,22 @@ const { useState } = React;
 
             {/* 컨트롤 패널 */}
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
-              <div className="text-sm text-gray-400 mb-4 font-semibold tracking-wider">ACTION PANEL</div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-sm text-gray-400 font-semibold tracking-wider">ACTION PANEL</div>
+                {gameOver && (
+                  <button onClick={resetGame} className="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                    ＋ 새 경기
+                  </button>
+                )}
+              </div>
 
+              {gameOver && (
+                <div className="mb-4 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-sm font-medium">
+                  🏁 경기가 종료되었습니다. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.
+                </div>
+              )}
+
+              <div className={gameOver ? 'opacity-40 pointer-events-none' : ''}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="flex flex-col gap-2">
                   <button onClick={handleBall} className="py-3 px-4 bg-green-900/50 hover:bg-green-800 text-green-400 font-bold rounded-xl border border-green-700 transition-colors">볼 (Ball)</button>
@@ -615,7 +789,7 @@ const { useState } = React;
                      }`}>
                      되돌리기 (Undo)
                    </button>
-                   <button onClick={resetGame} className="py-3 px-4 bg-gray-900 hover:bg-black text-gray-500 font-bold rounded-xl border border-gray-800 transition-colors">게임 리셋</button>
+                   <button onClick={resetGame} className="py-3 px-4 bg-gray-900 hover:bg-black text-gray-500 font-bold rounded-xl border border-gray-800 transition-colors">새 경기 (초기화)</button>
                 </div>
               </div>
 
@@ -643,7 +817,74 @@ const { useState } = React;
                 </div>
                 <p className="text-xs text-gray-500 mt-3 leading-relaxed">💡 도루·폭투·견제사·태그업 등은 베이스 주자를 직접 켜고/끄고, 득점이 나면 [득점 +1]로 반영하세요. 모든 동작은 되돌리기(Undo)로 취소됩니다.</p>
               </div>
+              </div>
             </div>
+
+            </div>
+            {/* 가운데 컬럼 끝 */}
+
+            {/* 오른쪽: 홈 라인업 */}
+            <div className="w-full xl:w-72 shrink-0 order-3">
+              {renderLineupCard(homeTeam, 'text-red-400')}
+            </div>
+
+            </div>
+            )}
+
+            {page === 'leaders' && (
+            <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
+                <div>
+                  <h1 className="text-2xl font-bold text-yellow-400">🏆 리더보드</h1>
+                  <p className="text-xs text-gray-400 mt-1">{statView === 'season' ? '전체 누적 기록' : '이번 경기 기록'} · 양 팀 타자 순위</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
+                    <button onClick={() => setStatView('game')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${statView === 'game' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>이번 경기</button>
+                    <button onClick={() => setStatView('season')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${statView === 'season' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}>전체 누적</button>
+                  </div>
+                  <div className="flex gap-1 bg-gray-900 p-1 rounded-lg">
+                    <button onClick={() => setLeaderSort('avg')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${leaderSort === 'avg' ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-white'}`}>타율순</button>
+                    <button onClick={() => setLeaderSort('hits')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${leaderSort === 'hits' ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-white'}`}>안타순</button>
+                    <button onClick={() => setLeaderSort('rbi')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${leaderSort === 'rbi' ? 'bg-yellow-600 text-white' : 'text-gray-400 hover:text-white'}`}>타점순</button>
+                  </div>
+                </div>
+              </div>
+
+              {leaderboard.length === 0 ? (
+                <p className="text-sm text-gray-500 py-4 text-center">아직 기록이 없습니다. 경기를 진행하면 순위가 표시됩니다.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs sm:text-sm whitespace-nowrap">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-700">
+                        <th className="py-1.5 px-2 font-semibold">순위</th>
+                        <th className="text-left py-1.5 px-2 font-semibold">이름</th>
+                        <th className="text-left py-1.5 px-2 font-semibold">팀</th>
+                        <th className="py-1.5 px-2 font-semibold">타수</th>
+                        <th className="py-1.5 px-2 font-semibold">안타</th>
+                        <th className={`py-1.5 px-2 font-semibold ${leaderSort === 'avg' ? 'text-yellow-400' : ''}`}>타율</th>
+                        <th className={`py-1.5 px-2 font-semibold ${leaderSort === 'rbi' ? 'text-yellow-400' : ''}`}>타점</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaderboard.map((p, i) => (
+                        <tr key={i} className="border-b border-gray-800">
+                          <td className="py-1.5 px-2 text-center font-bold text-gray-400">{i + 1}</td>
+                          <td className="py-1.5 px-2 text-left truncate max-w-[8rem]">{p.name}</td>
+                          <td className={`py-1.5 px-2 text-left text-xs ${p.side === 'away' ? 'text-blue-400' : 'text-red-400'}`}>{p.team}</td>
+                          <td className="py-1.5 px-2 text-center font-mono text-gray-300">{p.ab}</td>
+                          <td className={`py-1.5 px-2 text-center font-mono ${leaderSort === 'hits' ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}>{p.h}</td>
+                          <td className={`py-1.5 px-2 text-center font-mono ${leaderSort === 'avg' ? 'text-yellow-300 font-bold' : 'text-white'}`}>{formatAvg(p.h, p.ab)}</td>
+                          <td className={`py-1.5 px-2 text-center font-mono ${leaderSort === 'rbi' ? 'text-yellow-300 font-bold' : 'text-white'}`}>{p.r}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            )}
 
           </div>
 
@@ -651,7 +892,7 @@ const { useState } = React;
           {isSettingsOpen && (
             <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 p-6 sm:p-8 rounded-2xl border border-gray-700 w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
-                <h2 className="text-2xl font-bold text-white mb-4">팀 설정 및 명단 관리 (최대 15명)</h2>
+                <h2 className="text-2xl font-bold text-white mb-4">팀 설정 및 명단 관리</h2>
 
                 {/* 탭 메뉴 */}
                 <div className="flex gap-4 mb-6 border-b border-gray-700 pb-2">
@@ -681,16 +922,37 @@ const { useState } = React;
                     </div>
                   </div>
 
+                  {/* 경기 규칙 설정 */}
+                  <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
+                    <h3 className="text-sm font-bold text-gray-300 mb-3">경기 규칙</h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">정규 이닝 수</label>
+                        <input type="number" min="1" max="30" value={tempMaxInnings} onChange={(e) => setTempMaxInnings(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">이닝당 아웃</label>
+                        <input type="number" min="1" max="10" value={tempOutsPerInning} onChange={(e) => setTempOutsPerInning(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">타자 수(타순)</label>
+                        <input type="number" min="1" max={MAX_ROSTER} value={tempRosterSize} onChange={(e) => setTempRosterSize(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">기본값: 9이닝 · 3아웃 · 타자 9명. 경기 진행 중에도 변경할 수 있습니다. (타자 최대 {MAX_ROSTER}명)</p>
+                  </div>
+
                   {settingsTab === 'manual' ? (
                     <div className="grid grid-cols-2 gap-6 mt-4">
                       <div>
                         <h3 className="text-blue-400 font-bold mb-3 text-sm">어웨이 명단 (AWAY)</h3>
-                        {tempAwayLineup.map((name, i) => (
+                        {tempAwayLineup.slice(0, Math.max(1, parseInt(tempRosterSize, 10) || 9)).map((name, i) => (
                           <div key={`away-${i}`} className="flex items-center gap-2 mb-2">
                             <span className="w-6 text-center text-gray-400 text-sm font-bold">{i + 1}</span>
                             <input
                               type="text"
                               value={name}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => {
                                 const newArr = [...tempAwayLineup];
                                 newArr[i] = e.target.value;
@@ -704,12 +966,13 @@ const { useState } = React;
                       </div>
                       <div>
                         <h3 className="text-red-400 font-bold mb-3 text-sm">홈 명단 (HOME)</h3>
-                        {tempHomeLineup.map((name, i) => (
+                        {tempHomeLineup.slice(0, Math.max(1, parseInt(tempRosterSize, 10) || 9)).map((name, i) => (
                           <div key={`home-${i}`} className="flex items-center gap-2 mb-2">
                             <span className="w-6 text-center text-gray-400 text-sm font-bold">{i + 1}</span>
                             <input
                               type="text"
                               value={name}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => {
                                 const newArr = [...tempHomeLineup];
                                 newArr[i] = e.target.value;
