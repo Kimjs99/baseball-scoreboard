@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.4.0] - 2026-06-22
+## [v0.4.0] - 2026-06-22 · 공유 배포 `@7`
 
 ### ✨ Features
 - 병살(더블플레이) 기록 패널 추가 — 뜬공 포구 후 주자 베이스 미리 이탈 등 더블플레이 상황 기록. 주자가 있을 때만 활성화되며 베이스에 있는 주자를 선택하면 타자 뜬공/땅볼 아웃(타수+1, 안타 없음) + 지정 주자 아웃 = 2아웃 처리, Undo 지원 (ed97fd9)
@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### 📝 Documentation
 - 테스트/툴링 부재 및 참고 문서 안내로 CLAUDE.md 보강 — 빌드 외 npm 스크립트·테스트·린터 부재 명시(전역 커버리지 컨벤션 비적용), 빌드 중간산출물/커밋 산출물 구분, 한국어 참고 문서 목록 추가 (6b9778d)
 - 기록용 링크 모음 문서 추가 (b3f39d3)
+- 공유 배포 버전 표기 `@6` → `@7` 갱신 — 병살 패널·시트 저장 없이 종료 옵션 재배포 반영 (9bf9b0a)
 
 ## [v0.3.0] - 2026-06-20
 
