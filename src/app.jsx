@@ -1,4 +1,4 @@
-const { useState } = React;
+const { useState, useEffect, useRef } = React;
 
     // doGet 템플릿에서 주입되는 현재 웹앱(/exec) URL. 결과 전송 기본값으로 사용.
     const WEB_APP_URL = "<?= webAppUrl ?>";
@@ -27,6 +27,26 @@ const { useState } = React;
         seasonHits: 0,
         seasonRbi: 0,
       }));
+    };
+
+    // 진행 중 경기 자동저장 키(localStorage). v 접미사로 스키마 변경 시 무효화.
+    const AUTOSAVE_KEY = 'baseball-scoreboard:autosave:v1';
+
+    // 저장본(snapshot)에 "이어서 진행할 만한 진행"이 있는지 판정.
+    // 1회초 0:0 무진행 등 새 경기와 다를 바 없는 상태면 false → 재접속 시 프롬프트 안 띄움.
+    const savedGameHasProgress = (s) => {
+      if (!s) return false;
+      if (s.gameOver) return true;
+      if ((s.inning || 1) > 1) return true;
+      if ((s.outs || 0) || (s.balls || 0) || (s.strikes || 0)) return true;
+      const b = s.bases || {};
+      if (b.first || b.second || b.third) return true;
+      const a = s.awayTeam || {}, h = s.homeTeam || {};
+      if ((a.runs || 0) + (a.hits || 0) + (h.runs || 0) + (h.hits || 0) > 0) return true;
+      if ((a.currentBatter || 0) + (h.currentBatter || 0) > 0) return true;
+      const anyAB = (t) => (((t && t.lineup) || []).some((x) => (x.atBats || 0) > 0 || (x.hits || 0) > 0));
+      if (anyAB(a) || anyAB(h)) return true;
+      return false;
     };
 
     function BaseballScoreboard() {
@@ -71,6 +91,8 @@ const { useState } = React;
 
       // 경기 종료 여부 (강제 종료 시 true → 액션 패널 잠금)
       const [gameOver, setGameOver] = useState(false);
+      // 종료 사유: 'walkoff'(끝내기) | 'final'(정규/연장 종료) | 'manual'(수동 종료) | null
+      const [endReason, setEndReason] = useState(null);
 
       // 라인업/리더보드 통계 보기 범위 ('game': 이번 경기 / 'season': 전체 누적)
       const [statView, setStatView] = useState('game');
@@ -81,6 +103,13 @@ const { useState } = React;
 
       // 상태 기록 저장소 (Undo용)
       const [history, setHistory] = useState([]);
+
+      // 자동저장에서 복원할 "진행 중이던 경기" 스냅샷(있으면 이어하기 프롬프트 노출)
+      const [resumePrompt, setResumePrompt] = useState(null);
+      // 마운트 직후 첫 자동저장을 건너뛰어 기존 저장본을 덮어쓰지 않도록 하는 가드
+      const bootedRef = useRef(false);
+      // 직전 하프이닝(이닝/초말) 추적 — 자동 종료 판정에서 "하프이닝 경계"를 구분하는 데 사용
+      const prevHalfRef = useRef({ inning: 1, isTop: true });
 
       // --- 설정(구글 시트 연동 및 수동 입력) 상태 ---
       const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -379,6 +408,7 @@ const { useState } = React;
           "현재 경기를 종료하고 결과를 저장하시겠습니까?\n종료하면 액션 패널이 잠기며, [새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.",
           () => {
             setGameOver(true);
+            setEndReason('manual');
             setIsExportOpen(true);
           }
         );
@@ -390,7 +420,7 @@ const { useState } = React;
         if (gameOver) return;
         showConfirm(
           "결과를 구글 시트에 저장하지 않고 경기를 종료할까요?\n액션 패널이 잠기며, 필요하면 나중에 [📤 결과 저장]으로 직접 보낼 수 있습니다.",
-          () => setGameOver(true)
+          () => { setGameOver(true); setEndReason('manual'); }
         );
       };
 
@@ -423,6 +453,8 @@ const { useState } = React;
         setHomeTeam(foldTeam);
         setHistory([]);
         setGameOver(false);
+        setEndReason(null);
+        prevHalfRef.current = { inning: 1, isTop: true };
       };
 
       const resetGame = () => {
@@ -431,6 +463,93 @@ const { useState } = React;
           startNewGame
         );
       };
+
+      // --- 진행 중 경기 자동저장 / 이어하기 ---
+      // 마운트 시 1회: 저장된 진행 중 경기가 있으면 이어하기 프롬프트를 띄운다.
+      useEffect(() => {
+        try {
+          const raw = localStorage.getItem(AUTOSAVE_KEY);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (savedGameHasProgress(saved)) setResumePrompt(saved);
+          }
+        } catch (e) { /* localStorage 차단 등은 조용히 무시 */ }
+      }, []);
+
+      // 핵심 경기 상태가 바뀔 때마다 전체 스냅샷을 localStorage에 저장.
+      // (Undo 스택/순수 UI 상태는 제외 — 복원에 필요한 게임 진행 상태만)
+      useEffect(() => {
+        if (!bootedRef.current) { bootedRef.current = true; return; } // 최초 렌더는 스킵
+        if (resumePrompt) return; // 이어하기 결정 대기 중엔 덮어쓰지 않음
+        try {
+          localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+            v: 1,
+            savedAt: Date.now(),
+            inning, isTop, balls, strikes, outs, bases,
+            awayTeam, homeTeam,
+            maxInnings, outsPerInning, awayRosterSize, homeRosterSize,
+            gameOver,
+          }));
+        } catch (e) { /* 용량 초과/차단 등 무시 */ }
+      }, [inning, isTop, balls, strikes, outs, bases, awayTeam, homeTeam, maxInnings, outsPerInning, awayRosterSize, homeRosterSize, gameOver, resumePrompt]);
+
+      // 이어서 진행: 저장 스냅샷을 현재 상태로 복원(Undo 스택은 초기화).
+      const resumeSavedGame = () => {
+        const s = resumePrompt;
+        if (!s) { setResumePrompt(null); return; }
+        setInning(s.inning || 1);
+        setIsTop(typeof s.isTop === 'boolean' ? s.isTop : true);
+        setBalls(s.balls || 0);
+        setStrikes(s.strikes || 0);
+        setOuts(s.outs || 0);
+        setBases(s.bases || { first: false, second: false, third: false });
+        if (s.awayTeam) setAwayTeam(s.awayTeam);
+        if (s.homeTeam) setHomeTeam(s.homeTeam);
+        setMaxInnings(s.maxInnings || 9);
+        setOutsPerInning(s.outsPerInning || 3);
+        setAwayRosterSize(s.awayRosterSize || 9);
+        setHomeRosterSize(s.homeRosterSize || 9);
+        setGameOver(!!s.gameOver);
+        setHistory([]);
+        setResumePrompt(null);
+      };
+
+      // 저장본 버리고 새 경기로 시작(현재 메모리 상태는 초기 새 경기 그대로).
+      const discardSavedGame = () => {
+        try { localStorage.removeItem(AUTOSAVE_KEY); } catch (e) {}
+        setResumePrompt(null);
+      };
+
+      // --- 경기 자동 종료(콜드/끝내기) 판정 ---
+      // 점수·이닝 상태가 한 커밋으로 반영된 뒤 평가되도록 이펙트로 처리한다.
+      // 규칙(정규 이닝 = maxInnings):
+      //  · 끝내기/말공격 불필요: 최종 이닝 이상에서 '말(홈) 공격' 중 홈이 앞서면 즉시 종료.
+      //    (말 시작 시점에 이미 홈이 앞서 있으면 = 말 공격 자체가 불필요 → 바로 종료)
+      //  · 정규 종료: 말 공격이 끝나(다음 회 초로 경계 이동) 동점이 아니면 종료(원정 승 등).
+      //    동점이면 연장 진행. 이 판정은 '하프이닝 경계'에서만 적용해 초공격 중 리드로 오작동하지 않게 한다.
+      useEffect(() => {
+        if (gameOver) { prevHalfRef.current = { inning, isTop }; return; }
+        const a = awayTeam.runs, h = homeTeam.runs;
+        const prev = prevHalfRef.current;
+        const boundary = (inning !== prev.inning) || (isTop !== prev.isTop);
+        prevHalfRef.current = { inning, isTop };
+
+        // 끝내기 / 말공격 불필요: 최종 이닝 이상 말(홈) 공격에서 홈 리드 → 즉시 종료
+        if (!isTop && inning >= maxInnings && h > a) {
+          setGameOver(true);
+          setEndReason('walkoff');
+          return;
+        }
+        // 정규/연장 종료: 말 공격 종료 직후(다음 회 초로 경계 이동)이고 동점이 아니면 종료
+        if (boundary && isTop && (inning - 1) >= maxInnings && a !== h) {
+          setGameOver(true);
+          setEndReason('final');
+          // 실제로 진행하지 않은 다음 회 초로 넘어간 상태이므로, 종료된 말 이닝으로 되돌린다.
+          setInning(inning - 1);
+          setIsTop(false);
+          return;
+        }
+      }, [inning, isTop, awayTeam.runs, homeTeam.runs, maxInnings, gameOver]);
 
       // --- 명단 및 설정 처리 로직 ---
       const openSettings = () => {
@@ -844,11 +963,20 @@ const { useState } = React;
                 )}
               </div>
 
-              {gameOver && (
-                <div className="mb-4 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-sm font-medium">
-                  🏁 경기가 종료되었습니다. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.
-                </div>
-              )}
+              {gameOver && (() => {
+                const a = awayTeam.runs, h = homeTeam.runs;
+                const winner = a === h ? null : (a > h ? awayTeam.name : homeTeam.name);
+                const head = endReason === 'walkoff'
+                  ? `🎉 끝내기! ${homeTeam.name} 승리`
+                  : winner
+                    ? `🏁 경기 종료 — ${winner} 승리 (${a} : ${h})`
+                    : `🏁 경기가 종료되었습니다`;
+                return (
+                  <div className="mb-4 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-sm font-medium">
+                    {head}. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.
+                  </div>
+                );
+              })()}
 
               <div className={gameOver ? 'opacity-40 pointer-events-none' : ''}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1175,6 +1303,30 @@ const { useState } = React;
                 <div className="flex justify-end mt-6">
                   <button onClick={() => setIsExportOpen(false)} className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl font-semibold transition-colors">닫기</button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 진행 중이던 경기 이어하기 프롬프트 */}
+          {resumePrompt && (
+            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[110] p-4">
+              <div className="bg-gray-800 border border-gray-600 p-6 sm:p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+                <div className="text-3xl mb-2">⏸️</div>
+                <h2 className="text-xl font-bold text-yellow-400 mb-3">진행 중이던 경기가 있습니다</h2>
+                <p className="text-gray-200 text-base font-semibold mb-1">
+                  {(resumePrompt.awayTeam && resumePrompt.awayTeam.name) || 'AWAY'} {(resumePrompt.awayTeam && resumePrompt.awayTeam.runs) || 0}
+                  <span className="text-gray-500"> : </span>
+                  {(resumePrompt.homeTeam && resumePrompt.homeTeam.runs) || 0} {(resumePrompt.homeTeam && resumePrompt.homeTeam.name) || 'HOME'}
+                </p>
+                <p className="text-gray-400 text-xs mb-6">
+                  {resumePrompt.gameOver ? '경기 종료 상태' : `${resumePrompt.inning || 1}회 ${resumePrompt.isTop ? '초' : '말'}`}
+                  {resumePrompt.savedAt ? ` · 저장: ${new Date(resumePrompt.savedAt).toLocaleString()}` : ''}
+                </p>
+                <div className="flex justify-center gap-3">
+                  <button onClick={discardSavedGame} className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-xl text-white font-semibold transition-colors">새 경기로 시작</button>
+                  <button onClick={resumeSavedGame} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-white font-bold transition-colors">이어서 진행</button>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-4 leading-relaxed">💾 경기는 이 브라우저에 자동 저장됩니다. 실수로 닫거나 새로고침해도 이어서 진행할 수 있어요.</p>
               </div>
             </div>
           )}
