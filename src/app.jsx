@@ -690,24 +690,26 @@ const { useState } = React;
             <div className="flex-1 min-w-0 w-full space-y-6 order-1 xl:order-2">
             {/* 헤더 및 스코어보드 테이블 */}
             <div className="bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-xl border border-gray-700">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4">
-                <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400">BASEBALL SCOREBOARD</h1>
-                <div className="flex items-center flex-wrap gap-4">
-                  <div className="text-lg font-bold w-full md:w-auto text-right mb-2 md:mb-0">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                <div className="flex items-center justify-between w-full md:w-auto gap-4">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400">BASEBALL SCOREBOARD</h1>
+                  <div className="text-lg font-bold text-right whitespace-nowrap">
                     {gameOver
                       ? <span className="text-red-400">경기 종료</span>
                       : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span></>}
                   </div>
-                  <button onClick={endGame} className="bg-red-800 hover:bg-red-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-red-600 flex-1 md:flex-none">
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto md:flex md:items-center">
+                  <button onClick={endGame} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-red-800 hover:bg-red-700 border border-red-600">
                     🏁 종료·저장
                   </button>
-                  <button onClick={endGameWithoutSave} className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-gray-500 flex-1 md:flex-none">
+                  <button onClick={endGameWithoutSave} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-500">
                     🚫 저장 없이 종료
                   </button>
-                  <button onClick={() => setIsExportOpen(true)} className="bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-green-600 flex-1 md:flex-none">
+                  <button onClick={() => setIsExportOpen(true)} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-green-700 hover:bg-green-600 border border-green-600">
                     📤 결과 저장
                   </button>
-                  <button onClick={openSettings} className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-gray-600 flex-1 md:flex-none">
+                  <button onClick={openSettings} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-600">
                     ⚙️ 팀 설정
                   </button>
                 </div>
