@@ -42,6 +42,10 @@ clasp tail-logs                     # view Stackdriver logs
 
 Editing flow: change `src/app.jsx` → `npm run build` → `clasp push` → (re)deploy. Changes are NOT live until pushed **and** (re)deployed. `@HEAD` deployment reflects the latest push; versioned deployments are frozen snapshots.
 
+**No tests, no linter, no formatter** — `build` is the only npm script. Verification is manual (deploy + hard-refresh the `/exec` URL). The build emits an intermediate `build/tw.css` (gitignored); the committed artifact is `apps-script/Index.html`. (Note: the global `test-coverage-optimizer` agent / 80%-coverage convention does not apply to this repo.)
+
+Reference docs (Korean): `README.md` (overview), `사용설명서.md` (end-user manual), `CHANGELOG.md`, `기록용_링크.md` (recording links).
+
 ## Architecture notes that span files
 
 - **Front/back coupling via template injection.** `doGet` renders `Index.html` as an Apps Script *template* (`createTemplateFromFile`) and injects `template.webAppUrl = ScriptApp.getService().getUrl()`. The app code reads it as `const WEB_APP_URL = "<?= webAppUrl ?>"` and uses it as the default result-export target. So the app POSTs results back to *its own* `/exec` URL — `doPost` and the export button are the same endpoint. The `<?= webAppUrl ?>` scriptlet lives in `src/app.jsx` as a plain string literal and survives Babel compilation; the template substitution happens server-side at serve time. Keep it intact.
