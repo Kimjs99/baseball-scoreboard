@@ -690,26 +690,26 @@ const { useState } = React;
             <div className="flex-1 min-w-0 w-full space-y-6 order-1 xl:order-2">
             {/* 헤더 및 스코어보드 테이블 */}
             <div className="bg-gray-800 p-4 sm:p-6 rounded-2xl shadow-xl border border-gray-700">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <div className="flex items-center justify-between w-full md:w-auto gap-4">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400">BASEBALL SCOREBOARD</h1>
-                  <div className="text-lg font-bold text-right whitespace-nowrap">
+              <div className="mb-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400 leading-tight">BASEBALL SCOREBOARD</h1>
+                  <div className="text-lg font-bold text-right whitespace-nowrap shrink-0">
                     {gameOver
                       ? <span className="text-red-400">경기 종료</span>
                       : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span></>}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full md:w-auto md:flex md:items-center">
-                  <button onClick={endGame} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-red-800 hover:bg-red-700 border border-red-600">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button onClick={endGame} className="px-2 py-2 rounded-lg text-sm font-semibold text-center transition-colors bg-red-800 hover:bg-red-700 border border-red-600">
                     🏁 종료·저장
                   </button>
-                  <button onClick={endGameWithoutSave} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-500">
+                  <button onClick={endGameWithoutSave} className="px-2 py-2 rounded-lg text-sm font-semibold text-center transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-500">
                     🚫 저장 없이 종료
                   </button>
-                  <button onClick={() => setIsExportOpen(true)} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-green-700 hover:bg-green-600 border border-green-600">
+                  <button onClick={() => setIsExportOpen(true)} className="px-2 py-2 rounded-lg text-sm font-semibold text-center transition-colors bg-green-700 hover:bg-green-600 border border-green-600">
                     📤 결과 저장
                   </button>
-                  <button onClick={openSettings} className="px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-600">
+                  <button onClick={openSettings} className="px-2 py-2 rounded-lg text-sm font-semibold text-center transition-colors bg-gray-700 hover:bg-gray-600 border border-gray-600">
                     ⚙️ 팀 설정
                   </button>
                 </div>
@@ -851,36 +851,36 @@ const { useState } = React;
               )}
 
               <div className={gameOver ? 'opacity-40 pointer-events-none' : ''}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="flex flex-col gap-2">
-                  <button onClick={handleBall} className="py-3 px-4 bg-green-900/50 hover:bg-green-800 text-green-400 font-bold rounded-xl border border-green-700 transition-colors">볼 (Ball)</button>
-                  <button onClick={handleStrike} className="py-3 px-4 bg-yellow-900/50 hover:bg-yellow-800 text-yellow-400 font-bold rounded-xl border border-yellow-700 transition-colors">스트라이크 (Strike)</button>
-                  <button onClick={handleFoul} className="py-3 px-4 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-xl border border-gray-500 transition-colors">파울 (Foul)</button>
+                  <button onClick={handleBall} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-green-900/50 hover:bg-green-800 text-green-400 font-bold rounded-xl border border-green-700 transition-colors">볼 (Ball)</button>
+                  <button onClick={handleStrike} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-yellow-900/50 hover:bg-yellow-800 text-yellow-400 font-bold rounded-xl border border-yellow-700 transition-colors">스트라이크 (Strike)</button>
+                  <button onClick={handleFoul} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-xl border border-gray-500 transition-colors">파울 (Foul)</button>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <button onClick={() => handleHit(1)} className="py-3 px-4 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">1루타 (1B)</button>
-                  <button onClick={() => handleHit(2)} className="py-3 px-4 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">2루타 (2B)</button>
-                  <button onClick={() => handleHit(3)} className="py-3 px-4 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">3루타 (3B)</button>
+                  <button onClick={() => handleHit(1)} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">1루타 (1B)</button>
+                  <button onClick={() => handleHit(2)} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">2루타 (2B)</button>
+                  <button onClick={() => handleHit(3)} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-blue-900/50 hover:bg-blue-800 text-blue-400 font-bold rounded-xl border border-blue-700 transition-colors">3루타 (3B)</button>
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <button onClick={() => handleHit(4)} className="py-3 px-4 bg-purple-900/50 hover:bg-purple-800 text-purple-400 font-bold rounded-xl border border-purple-700 transition-colors">홈런 (HR)</button>
-                  <button onClick={handleOutAction} className="py-3 px-4 bg-red-900/50 hover:bg-red-800 text-red-400 font-bold rounded-xl border border-red-700 transition-colors h-full">타격 아웃 (Out)</button>
+                  <button onClick={() => handleHit(4)} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-purple-900/50 hover:bg-purple-800 text-purple-400 font-bold rounded-xl border border-purple-700 transition-colors">홈런 (HR)</button>
+                  <button onClick={handleOutAction} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-red-900/50 hover:bg-red-800 text-red-400 font-bold rounded-xl border border-red-700 transition-colors">타격 아웃 (Out)</button>
                 </div>
 
-                <div className="flex flex-col gap-2 justify-end">
+                <div className="flex flex-col gap-2">
                    <button
                      onClick={handleUndo}
                      disabled={history.length === 0}
-                     className={`py-3 px-4 font-bold rounded-xl border transition-colors mt-auto ${
+                     className={`min-h-[3.5rem] flex items-center justify-center text-center px-3 font-bold rounded-xl border transition-colors ${
                        history.length === 0
                          ? 'bg-gray-800 text-gray-600 border-gray-700 cursor-not-allowed'
                          : 'bg-orange-900/50 hover:bg-orange-800 text-orange-400 border-orange-700'
                      }`}>
                      되돌리기 (Undo)
                    </button>
-                   <button onClick={resetGame} className="py-3 px-4 bg-gray-900 hover:bg-black text-gray-500 font-bold rounded-xl border border-gray-800 transition-colors">새 경기 (초기화)</button>
+                   <button onClick={resetGame} className="min-h-[3.5rem] flex items-center justify-center text-center px-3 bg-gray-900 hover:bg-black text-gray-500 font-bold rounded-xl border border-gray-800 transition-colors">새 경기 (초기화)</button>
                 </div>
               </div>
 
