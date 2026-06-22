@@ -59,6 +59,9 @@ const { useState } = React;
       const [outs, setOuts] = useState(0);
       const [bases, setBases] = useState({ first: false, second: false, third: false });
 
+      // 병살(더블플레이) 주자 선택 모드 (true면 어느 주자를 아웃시킬지 고르는 버튼 노출)
+      const [dpMode, setDpMode] = useState(false);
+
       // 경기 규칙 설정 (팀 설정에서 변경)
       const [maxInnings, setMaxInnings] = useState(9);
       const [outsPerInning, setOutsPerInning] = useState(3);
@@ -316,6 +319,26 @@ const { useState } = React;
         setBases(nb);
         updateStats(runsScored, false, false, runsScored); // 스퀴즈 득점은 타점
         addOut();
+      };
+
+      // 병살(더블플레이): 타자 아웃(뜬공/땅볼, 타수 포함·안타 없음) + 지정 주자 아웃 = 2아웃.
+      // 예) 뜬공 포구 후 주자가 베이스를 미리 이탈해 어필로 아웃. runnerBase: 'first'|'second'|'third'
+      const handleDoublePlay = (runnerBase) => {
+        saveHistory();
+        // 두 번째 아웃이 된 주자를 베이스에서 제거
+        setBases((prev) => ({ ...prev, [runnerBase]: false }));
+        // 타자: 타수 포함 아웃 처리(안타·득점 없음)
+        updateStats(0, false, true);
+        // 2아웃 가산 — 타순은 타자분 1회만 진루(주자 아웃은 타순과 무관)
+        const newOuts = outs + 2;
+        if (newOuts >= outsPerInning) {
+          advanceBatter();
+          switchInning();
+        } else {
+          setOuts(newOuts);
+          advanceBatter();
+        }
+        setDpMode(false);
       };
 
       // 주자 수동 토글(도루·폭투·견제사·태그업 등 예외 상황 직접 반영)
@@ -803,7 +826,35 @@ const { useState } = React;
                   <button onClick={handleReachOnError} className="py-3 px-3 bg-rose-900/50 hover:bg-rose-800 text-rose-300 font-bold rounded-xl border border-rose-700 transition-colors text-sm">실책 출루 (ROE)</button>
                   <button onClick={handleSacFly} className="py-3 px-3 bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 font-bold rounded-xl border border-cyan-700 transition-colors text-sm">희생플라이 (SF)</button>
                   <button onClick={handleSacBunt} className="py-3 px-3 bg-sky-900/50 hover:bg-sky-800 text-sky-300 font-bold rounded-xl border border-sky-700 transition-colors text-sm">희생번트 (SAC)</button>
+                  {(() => {
+                    const hasRunner = bases.first || bases.second || bases.third;
+                    return (
+                      <button
+                        onClick={() => setDpMode((v) => !v)}
+                        disabled={!hasRunner && !dpMode}
+                        className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${
+                          !hasRunner && !dpMode
+                            ? 'bg-gray-800 text-gray-600 border-gray-700 cursor-not-allowed'
+                            : dpMode
+                            ? 'bg-purple-600 text-white border-purple-400 shadow-[0_0_10px_#9333ea]'
+                            : 'bg-purple-900/50 hover:bg-purple-800 text-purple-300 border-purple-700'
+                        }`}>
+                        병살 (DP)
+                      </button>
+                    );
+                  })()}
                 </div>
+                {dpMode && (
+                  <div className="mt-3 p-3 bg-purple-950/40 rounded-xl border border-purple-800">
+                    <div className="text-xs text-purple-300 mb-2 font-semibold">병살 — 타자는 뜬공/땅볼 아웃, 두 번째로 아웃된 주자를 선택하세요</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {bases.first && <button onClick={() => handleDoublePlay('first')} className="py-2.5 px-3 bg-purple-800 hover:bg-purple-700 text-purple-100 font-bold rounded-lg border border-purple-600 transition-colors text-sm">1루 주자 아웃</button>}
+                      {bases.second && <button onClick={() => handleDoublePlay('second')} className="py-2.5 px-3 bg-purple-800 hover:bg-purple-700 text-purple-100 font-bold rounded-lg border border-purple-600 transition-colors text-sm">2루 주자 아웃</button>}
+                      {bases.third && <button onClick={() => handleDoublePlay('third')} className="py-2.5 px-3 bg-purple-800 hover:bg-purple-700 text-purple-100 font-bold rounded-lg border border-purple-600 transition-colors text-sm">3루 주자 아웃</button>}
+                      <button onClick={() => setDpMode(false)} className="py-2.5 px-3 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-lg border border-gray-500 transition-colors text-sm">취소</button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 주자 / 득점 수동 조정 (RUNNERS) */}
