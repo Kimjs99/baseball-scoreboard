@@ -815,7 +815,12 @@ const { useState, useEffect, useRef } = React;
                   <div className="text-lg font-bold text-right whitespace-nowrap shrink-0">
                     {gameOver
                       ? <span className="text-red-400">경기 종료</span>
-                      : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span></>}
+                      : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span>
+                          {inning > maxInnings
+                            ? <span className="ml-1.5 px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 text-xs font-bold align-middle">연장</span>
+                            : inning === maxInnings
+                              ? <span className="ml-1.5 px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 text-xs font-bold align-middle">최종회</span>
+                              : null}</>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
