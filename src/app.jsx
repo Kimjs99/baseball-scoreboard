@@ -10,7 +10,7 @@ const { useState } = React;
       return avg.startsWith('0.') ? avg.substring(1) : avg;
     };
 
-    // 타순 정원 최대치(내부 버퍼). 실제 사용 인원은 rosterSize로 조절.
+    // 타순 정원 최대치(내부 버퍼). 실제 사용 인원은 팀별 awayRosterSize/homeRosterSize로 조절.
     const MAX_ROSTER = 20;
 
     // 유틸리티: 초기 라인업 생성 (MAX_ROSTER명 버퍼)
@@ -65,7 +65,9 @@ const { useState } = React;
       // 경기 규칙 설정 (팀 설정에서 변경)
       const [maxInnings, setMaxInnings] = useState(9);
       const [outsPerInning, setOutsPerInning] = useState(3);
-      const [rosterSize, setRosterSize] = useState(9);
+      // 타순(참가 인원)은 팀마다 다를 수 있어 어웨이/홈을 따로 둔다.
+      const [awayRosterSize, setAwayRosterSize] = useState(9);
+      const [homeRosterSize, setHomeRosterSize] = useState(9);
 
       // 경기 종료 여부 (강제 종료 시 true → 액션 패널 잠금)
       const [gameOver, setGameOver] = useState(false);
@@ -90,7 +92,8 @@ const { useState } = React;
       const [tempHomeLineup, setTempHomeLineup] = useState(Array(MAX_ROSTER).fill(''));
       const [tempMaxInnings, setTempMaxInnings] = useState(9);
       const [tempOutsPerInning, setTempOutsPerInning] = useState(3);
-      const [tempRosterSize, setTempRosterSize] = useState(9);
+      const [tempAwayRosterSize, setTempAwayRosterSize] = useState(9);
+      const [tempHomeRosterSize, setTempHomeRosterSize] = useState(9);
 
       // 결과 내보내기(저장) 상태
       const [isExportOpen, setIsExportOpen] = useState(false);
@@ -132,9 +135,10 @@ const { useState } = React;
 
       const advanceBatter = () => {
         const teamSetter = isTop ? setAwayTeam : setHomeTeam;
+        const size = isTop ? awayRosterSize : homeRosterSize;
         teamSetter((prev) => ({
           ...prev,
-          currentBatter: (prev.currentBatter + 1) % rosterSize,
+          currentBatter: (prev.currentBatter + 1) % size,
         }));
         setBalls(0);
         setStrikes(0);
@@ -437,7 +441,8 @@ const { useState } = React;
         setTempHomeLineup(homeTeam.lineup.map((b, i) => b.name === `홈 타자 ${i + 1}` ? '' : b.name));
         setTempMaxInnings(maxInnings);
         setTempOutsPerInning(outsPerInning);
-        setTempRosterSize(rosterSize);
+        setTempAwayRosterSize(awayRosterSize);
+        setTempHomeRosterSize(homeRosterSize);
         setIsSettingsOpen(true);
       };
 
@@ -482,18 +487,47 @@ const { useState } = React;
           parsedHomeLineup = parsedHomeLineup.map((b, i) => ({ ...b, name: tempHomeLineup[i] || `홈 타자 ${i+1}` }));
         }
 
-        // 경기 규칙(이닝 수 / 아웃 카운트 / 타자 수) 적용 — 범위 보정
+        // 경기 규칙(이닝 수 / 아웃 카운트 / 팀별 타자 수) 적용 — 범위 보정
         const safeInnings = Math.min(30, Math.max(1, parseInt(tempMaxInnings, 10) || 9));
         const safeOuts = Math.min(10, Math.max(1, parseInt(tempOutsPerInning, 10) || 3));
-        const safeRoster = Math.min(MAX_ROSTER, Math.max(1, parseInt(tempRosterSize, 10) || 9));
+        const safeAwayRoster = Math.min(MAX_ROSTER, Math.max(1, parseInt(tempAwayRosterSize, 10) || 9));
+        const safeHomeRoster = Math.min(MAX_ROSTER, Math.max(1, parseInt(tempHomeRosterSize, 10) || 9));
         setMaxInnings(safeInnings);
         setOutsPerInning(safeOuts);
-        setRosterSize(safeRoster);
+        setAwayRosterSize(safeAwayRoster);
+        setHomeRosterSize(safeHomeRoster);
 
-        // 타자 수가 줄어든 경우 현재 타순이 범위를 벗어나지 않도록 보정
-        setAwayTeam(prev => ({ ...prev, name: tempAwayName || 'AWAY', lineup: parsedAwayLineup, currentBatter: prev.currentBatter % safeRoster }));
-        setHomeTeam(prev => ({ ...prev, name: tempHomeName || 'HOME', lineup: parsedHomeLineup, currentBatter: prev.currentBatter % safeRoster }));
+        // 타자 수가 줄어든 경우 현재 타순이 범위를 벗어나지 않도록 보정(팀별)
+        setAwayTeam(prev => ({ ...prev, name: tempAwayName || 'AWAY', lineup: parsedAwayLineup, currentBatter: prev.currentBatter % safeAwayRoster }));
+        setHomeTeam(prev => ({ ...prev, name: tempHomeName || 'HOME', lineup: parsedHomeLineup, currentBatter: prev.currentBatter % safeHomeRoster }));
         setIsSettingsOpen(false);
+      };
+
+      // 명단 편집: 팀별 타순 한 줄 추가(빈 자리). 최대 MAX_ROSTER명까지.
+      // team: 'away' | 'home'
+      const addBatterRow = (team) => {
+        const [size, setSize] = team === 'away'
+          ? [tempAwayRosterSize, setTempAwayRosterSize]
+          : [tempHomeRosterSize, setTempHomeRosterSize];
+        const n = Math.max(1, Math.min(MAX_ROSTER, parseInt(size, 10) || 9));
+        if (n >= MAX_ROSTER) return;
+        setSize(n + 1);
+      };
+
+      // 명단 편집: 해당 팀의 idx번째 타순만 삭제 → 그 팀 타순이 한 칸씩 당겨지고 인원 -1.
+      // 양팀 인원이 달라도 되도록 팀별로 독립 처리. 버퍼 길이(MAX_ROSTER)는 끝에 빈 칸으로 유지.
+      const removeBatterRow = (team, idx) => {
+        const [size, setSize, setLineup] = team === 'away'
+          ? [tempAwayRosterSize, setTempAwayRosterSize, setTempAwayLineup]
+          : [tempHomeRosterSize, setTempHomeRosterSize, setTempHomeLineup];
+        const n = Math.max(1, Math.min(MAX_ROSTER, parseInt(size, 10) || 9));
+        if (n <= 1) return;
+        setLineup((arr) => {
+          const next = arr.filter((_, i) => i !== idx);
+          next.push('');
+          return next;
+        });
+        setSize(n - 1);
       };
 
       // --- 결과 내보내기(저장) 로직 ---
@@ -508,10 +542,10 @@ const { useState } = React;
         csvContent += `${homeTeam.name},${scoreCells(homeTeam)},${homeTeam.runs},${homeTeam.hits},${homeTeam.errors}\n\n`;
 
         csvContent += "팀,타순,이름,타수,안타,타율,타점\n";
-        awayTeam.lineup.slice(0, rosterSize).forEach(b => {
+        awayTeam.lineup.slice(0, awayRosterSize).forEach(b => {
           csvContent += `${awayTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)},${b.rbi}\n`;
         });
-        homeTeam.lineup.slice(0, rosterSize).forEach(b => {
+        homeTeam.lineup.slice(0, homeRosterSize).forEach(b => {
           csvContent += `${homeTeam.name},${b.order},${b.name},${b.atBats},${b.hits},${formatAvg(b.hits, b.atBats)},${b.rbi}\n`;
         });
 
@@ -525,32 +559,51 @@ const { useState } = React;
       };
 
       const handleExportWebhook = async () => {
-        if (!webhookUrl) {
+        const url = (webhookUrl || '').trim();
+        if (!url) {
           showMessage('웹앱 URL을 입력해주세요.');
+          return;
+        }
+        // 미치환 템플릿 플레이스홀더 감지: 정적 호스팅(테스트 서버 등)에서 doGet 템플릿이
+        // 실행되지 않아 "<?= webAppUrl ?>"가 그대로 남은 경우. 이 상태로 보내면
+        // no-cors라 실패해도 거짓 "전송 완료"가 떠서 시트에 저장되지 않는다.
+        if (url.indexOf('<?=') !== -1 || url.indexOf('?>') !== -1) {
+          showMessage('이 화면은 배포된 웹앱이 아니라 미리보기(정적) 버전이라 전송 URL이 비어 있습니다.\n배포된 /exec 주소(예: https://script.google.com/macros/s/.../exec)로 접속해 저장하세요.');
+          return;
+        }
+        // 정상적인 Apps Script 웹앱 /exec 주소인지 확인
+        if (!/^https:\/\/script\.google\.com\/.*\/exec$/.test(url)) {
+          showMessage('올바른 웹앱 주소가 아닙니다.\nhttps://script.google.com/macros/s/.../exec 형식의 배포 주소를 입력하세요.');
           return;
         }
         const payload = {
           date: new Date().toLocaleString(),
-          awayTeam: { name: awayTeam.name, runs: awayTeam.runs, hits: awayTeam.hits, scores: awayTeam.scores, lineup: awayTeam.lineup.slice(0, rosterSize) },
-          homeTeam: { name: homeTeam.name, runs: homeTeam.runs, hits: homeTeam.hits, scores: homeTeam.scores, lineup: homeTeam.lineup.slice(0, rosterSize) }
+          awayTeam: { name: awayTeam.name, runs: awayTeam.runs, hits: awayTeam.hits, scores: awayTeam.scores, lineup: awayTeam.lineup.slice(0, awayRosterSize) },
+          homeTeam: { name: homeTeam.name, runs: homeTeam.runs, hits: homeTeam.hits, scores: homeTeam.scores, lineup: homeTeam.lineup.slice(0, homeRosterSize) }
         };
         try {
-          await fetch(webhookUrl, {
+          await fetch(url, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
           });
-          showMessage('데이터 전송이 완료되었습니다.');
+          // no-cors 응답은 불투명(opaque)이라 실제 저장 성공 여부를 읽을 수 없다.
+          // 거짓 확신을 주지 않도록 "요청을 보냈다 + 시트에서 확인" 문구로 안내.
+          showMessage('전송 요청을 보냈습니다.\n실제 저장 여부는 구글 시트에서 확인하세요. (보안 정책상 앱에서 저장 성공을 직접 확인할 수 없습니다.)');
           setIsExportOpen(false);
         } catch (e) {
-          showMessage('전송 중 오류가 발생했습니다. URL을 확인해주세요.');
+          showMessage('전송 중 오류가 발생했습니다. URL과 네트워크 상태를 확인해주세요.');
         }
       };
 
       // --- UI 렌더링 ---
       const displayInnings = Math.max(maxInnings, inning);
       const inningColumns = Array.from({ length: displayInnings }, (_, i) => i + 1);
+
+      // 명단 편집기에 표시할 팀별 참가 인원 수 (문자열 입력 방어)
+      const editAwayCount = Math.max(1, Math.min(MAX_ROSTER, parseInt(tempAwayRosterSize, 10) || 9));
+      const editHomeCount = Math.max(1, Math.min(MAX_ROSTER, parseInt(tempHomeRosterSize, 10) || 9));
 
       // 라인업/리더보드용 통계 계산 (statView에 따라 이번 경기 또는 전체 누적)
       const viewStat = (b) => statView === 'season'
@@ -559,8 +612,8 @@ const { useState } = React;
 
       // 리더보드: 양 팀 선수를 합쳐 정렬
       const leaderboard = [
-        ...awayTeam.lineup.slice(0, rosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: awayTeam.name, side: 'away' })),
-        ...homeTeam.lineup.slice(0, rosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: homeTeam.name, side: 'home' })),
+        ...awayTeam.lineup.slice(0, awayRosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: awayTeam.name, side: 'away' })),
+        ...homeTeam.lineup.slice(0, homeRosterSize).map((b) => ({ ...viewStat(b), name: b.name, team: homeTeam.name, side: 'home' })),
       ]
         .filter((p) => p.ab > 0 || p.h > 0 || p.r > 0)
         .sort((a, b) => {
@@ -572,8 +625,8 @@ const { useState } = React;
           return avgB - avgA || b.h - a.h;
         });
 
-      // 라인업 기록 카드(좌:어웨이 / 우:홈 사이드 레일에 사용)
-      const renderLineupCard = (team, accent) => (
+      // 라인업 기록 카드(좌:어웨이 / 우:홈 사이드 레일에 사용). size: 해당 팀 참가 인원
+      const renderLineupCard = (team, accent, size) => (
         <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h3 className={`font-bold text-sm ${accent}`}>{team.name}</h3>
@@ -595,7 +648,7 @@ const { useState } = React;
                 </tr>
               </thead>
               <tbody>
-                {team.lineup.slice(0, rosterSize).map((b) => {
+                {team.lineup.slice(0, size).map((b) => {
                   const s = viewStat(b);
                   const isNow = !gameOver && team === currentTeam && b.id === currentBatter.id;
                   return (
@@ -630,7 +683,7 @@ const { useState } = React;
 
             {/* 왼쪽: 어웨이 라인업 */}
             <div className="w-full xl:w-72 shrink-0 order-2 xl:order-1">
-              {renderLineupCard(awayTeam, 'text-blue-400')}
+              {renderLineupCard(awayTeam, 'text-blue-400', awayRosterSize)}
             </div>
 
             {/* 가운데: 스코어보드 + 컨트롤 */}
@@ -889,7 +942,7 @@ const { useState } = React;
 
             {/* 오른쪽: 홈 라인업 */}
             <div className="w-full xl:w-72 shrink-0 order-3">
-              {renderLineupCard(homeTeam, 'text-red-400')}
+              {renderLineupCard(homeTeam, 'text-red-400', homeRosterSize)}
             </div>
 
             </div>
@@ -989,7 +1042,7 @@ const { useState } = React;
                   {/* 경기 규칙 설정 */}
                   <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
                     <h3 className="text-sm font-bold text-gray-300 mb-3">경기 규칙</h3>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm text-gray-400 mb-1">정규 이닝 수</label>
                         <input type="number" min="1" max="30" value={tempMaxInnings} onChange={(e) => setTempMaxInnings(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
@@ -998,56 +1051,64 @@ const { useState } = React;
                         <label className="block text-sm text-gray-400 mb-1">이닝당 아웃</label>
                         <input type="number" min="1" max="10" value={tempOutsPerInning} onChange={(e) => setTempOutsPerInning(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
                       </div>
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">타자 수(타순)</label>
-                        <input type="number" min="1" max={MAX_ROSTER} value={tempRosterSize} onChange={(e) => setTempRosterSize(e.target.value)} className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500" />
-                      </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">기본값: 9이닝 · 3아웃 · 타자 9명. 경기 진행 중에도 변경할 수 있습니다. (타자 최대 {MAX_ROSTER}명)</p>
+                    <p className="text-xs text-gray-500 mt-2">기본값: 9이닝 · 3아웃. 경기 진행 중에도 변경할 수 있습니다. 팀별 참가 인원(타순)은 아래 <b className="text-gray-300">수동 입력</b> 탭에서 ✕/＋로 조정하세요. (팀당 최대 {MAX_ROSTER}명)</p>
                   </div>
 
                   {settingsTab === 'manual' ? (
-                    <div className="grid grid-cols-2 gap-6 mt-4">
-                      <div>
-                        <h3 className="text-blue-400 font-bold mb-3 text-sm">어웨이 명단 (AWAY)</h3>
-                        {tempAwayLineup.slice(0, Math.max(1, parseInt(tempRosterSize, 10) || 9)).map((name, i) => (
-                          <div key={`away-${i}`} className="flex items-center gap-2 mb-2">
-                            <span className="w-6 text-center text-gray-400 text-sm font-bold">{i + 1}</span>
-                            <input
-                              type="text"
-                              value={name}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => {
-                                const newArr = [...tempAwayLineup];
-                                newArr[i] = e.target.value;
-                                setTempAwayLineup(newArr);
-                              }}
-                              className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                              placeholder={`어웨이 타자 ${i + 1}`}
-                            />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
+                      {[
+                        { key: 'away', label: '어웨이 (AWAY)', accent: 'text-blue-400', focus: 'focus:border-blue-500', names: tempAwayLineup, setNames: setTempAwayLineup, count: editAwayCount, ph: '어웨이' },
+                        { key: 'home', label: '홈 (HOME)', accent: 'text-red-400', focus: 'focus:border-red-500', names: tempHomeLineup, setNames: setTempHomeLineup, count: editHomeCount, ph: '홈' },
+                      ].map((t) => (
+                        <div key={t.key}>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className={`font-bold text-sm ${t.accent}`}>{t.label}</h3>
+                            <span className="text-xs text-gray-400">참가 인원: <b className="text-white">{t.count}</b>명</span>
                           </div>
-                        ))}
-                      </div>
-                      <div>
-                        <h3 className="text-red-400 font-bold mb-3 text-sm">홈 명단 (HOME)</h3>
-                        {tempHomeLineup.slice(0, Math.max(1, parseInt(tempRosterSize, 10) || 9)).map((name, i) => (
-                          <div key={`home-${i}`} className="flex items-center gap-2 mb-2">
-                            <span className="w-6 text-center text-gray-400 text-sm font-bold">{i + 1}</span>
-                            <input
-                              type="text"
-                              value={name}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => {
-                                const newArr = [...tempHomeLineup];
-                                newArr[i] = e.target.value;
-                                setTempHomeLineup(newArr);
-                              }}
-                              className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                              placeholder={`홈 타자 ${i + 1}`}
-                            />
+                          <div className="space-y-2">
+                            {Array.from({ length: t.count }, (_, i) => (
+                              <div key={`${t.key}-${i}`} className="flex items-center gap-2">
+                                <span className="w-6 text-center text-gray-400 text-sm font-bold shrink-0">{i + 1}</span>
+                                <input
+                                  type="text"
+                                  value={t.names[i] || ''}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const newArr = [...t.names];
+                                    newArr[i] = e.target.value;
+                                    t.setNames(newArr);
+                                  }}
+                                  className={`flex-1 min-w-0 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 text-sm text-white focus:outline-none ${t.focus}`}
+                                  placeholder={`${t.ph} 타자 ${i + 1}`}
+                                />
+                                <button
+                                  onClick={() => removeBatterRow(t.key, i)}
+                                  disabled={t.count <= 1}
+                                  title="이 타순 삭제"
+                                  className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-lg border text-sm font-bold transition-colors ${
+                                    t.count <= 1
+                                      ? 'bg-gray-800 text-gray-600 border-gray-700 cursor-not-allowed'
+                                      : 'bg-red-900/40 hover:bg-red-800 text-red-300 border-red-700'
+                                  }`}>
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                          <button
+                            onClick={() => addBatterRow(t.key)}
+                            disabled={t.count >= MAX_ROSTER}
+                            className={`mt-3 w-full py-2 rounded-lg border text-sm font-bold transition-colors ${
+                              t.count >= MAX_ROSTER
+                                ? 'bg-gray-800 text-gray-600 border-gray-700 cursor-not-allowed'
+                                : 'bg-gray-700 hover:bg-gray-600 text-gray-100 border-gray-500'
+                            }`}>
+                            ＋ 타자 추가
+                          </button>
+                        </div>
+                      ))}
+                      <p className="text-xs text-gray-500 sm:col-span-2 -mt-2">✕ 버튼으로 빈 자리나 불참 선수를 삭제하면 그 팀 타순이 한 칸씩 당겨지고 참가 인원이 줄어듭니다. <b className="text-gray-300">어웨이·홈 인원은 서로 다르게</b> 설정할 수 있습니다. (팀당 최소 1명 · 최대 {MAX_ROSTER}명)</p>
                     </div>
                   ) : (
                     <div>
