@@ -380,6 +380,16 @@ const { useState } = React;
         );
       };
 
+      // 경기 종료(저장 안 함): 결과를 시트에 보내지 않고 기록만 화면에 남긴 채 종료(잠금).
+      // 친선·연습 경기 등 시트 누적이 필요 없을 때 사용. 종료 후에도 [📤 결과 저장]으로 수동 저장은 가능.
+      const endGameWithoutSave = () => {
+        if (gameOver) return;
+        showConfirm(
+          "결과를 구글 시트에 저장하지 않고 경기를 종료할까요?\n액션 패널이 잠기며, 필요하면 나중에 [📤 결과 저장]으로 직접 보낼 수 있습니다.",
+          () => setGameOver(true)
+        );
+      };
+
       // 새 경기 시작: 이번 경기 기록을 전체(누적: seasonXxx)에 합산한 뒤 경기 상태를 초기화.
       const startNewGame = () => {
         const foldTeam = (prev) => ({
@@ -636,7 +646,10 @@ const { useState } = React;
                       : <>{inning}회 {isTop ? '초' : '말'} <span className="text-gray-500 text-sm">/ {maxInnings}회</span></>}
                   </div>
                   <button onClick={endGame} className="bg-red-800 hover:bg-red-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-red-600 flex-1 md:flex-none">
-                    🏁 경기 종료
+                    🏁 종료·저장
+                  </button>
+                  <button onClick={endGameWithoutSave} className="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-gray-500 flex-1 md:flex-none">
+                    🚫 저장 없이 종료
                   </button>
                   <button onClick={() => setIsExportOpen(true)} className="bg-green-700 hover:bg-green-600 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors border border-green-600 flex-1 md:flex-none">
                     📤 결과 저장
