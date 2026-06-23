@@ -158,6 +158,8 @@ const { useState, useEffect, useRef } = React;
             bases: { ...bases },
             awayTeam: cloneTeam(awayTeam),
             homeTeam: cloneTeam(homeTeam),
+            gameOver,
+            endReason,
           },
         ]);
       };
@@ -397,7 +399,24 @@ const { useState, useEffect, useRef } = React;
         setBases(lastState.bases);
         setAwayTeam(lastState.awayTeam);
         setHomeTeam(lastState.homeTeam);
+        // 종료 상태도 복원 — 끝내기/자동 종료를 유발한 플레이를 되돌리면 경기가 다시 진행 중이 된다.
+        setGameOver(!!lastState.gameOver);
+        setEndReason(lastState.gameOver ? (lastState.endReason || null) : null);
+        // 복원된 하프이닝으로 prevHalfRef를 맞춰 자동 종료 판정이 즉시 재발동(오작동)하지 않게 한다.
+        prevHalfRef.current = { inning: lastState.inning, isTop: lastState.isTop };
         setHistory((prev) => prev.slice(0, -1));
+      };
+
+      // 경기 종료 취소: 잠긴 상태를 풀고 직전 상황으로 되돌린다.
+      // 자동 종료(끝내기/정규)는 그 종료를 유발한 플레이를 함께 되돌려야 다시 종료되지 않으므로 Undo를 사용.
+      // 수동 종료는 게임 상태를 바꾸지 않았으니 잠금만 해제.
+      const cancelGameEnd = () => {
+        if (endReason === 'manual' || history.length === 0) {
+          setGameOver(false);
+          setEndReason(null);
+          return;
+        }
+        handleUndo();
       };
 
       // 경기 강제 종료: 현재 기록을 확정(잠금)하고 결과 저장 모달을 연다.
@@ -962,9 +981,14 @@ const { useState, useEffect, useRef } = React;
               <div className="flex items-center justify-between mb-4">
                 <div className="text-sm text-gray-400 font-semibold tracking-wider">ACTION PANEL</div>
                 {gameOver && (
-                  <button onClick={resetGame} className="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                    ＋ 새 경기
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={cancelGameEnd} className="bg-orange-900/60 hover:bg-orange-800 text-orange-300 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors border border-orange-700">
+                      ↩ 종료 취소
+                    </button>
+                    <button onClick={resetGame} className="bg-blue-600 hover:bg-blue-500 px-4 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                      ＋ 새 경기
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -978,7 +1002,7 @@ const { useState, useEffect, useRef } = React;
                     : `🏁 경기가 종료되었습니다`;
                 return (
                   <div className="mb-4 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-sm font-medium">
-                    {head}. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.
+                    {head}. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다. 잘못 종료됐다면 [↩ 종료 취소]로 직전 상황으로 되돌릴 수 있습니다.
                   </div>
                 );
               })()}
