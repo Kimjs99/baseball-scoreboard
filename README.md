@@ -47,6 +47,8 @@ clasp open-web-app          # 배포된 앱 열기
 
 배포 후 익명 접근 403이 뜨면, 에디터(`clasp open-script`)에서 `authorize` 함수를 1회 실행해 OAuth 스코프를 승인하세요.
 
+> 💻 **다른 컴퓨터에서 클론해 이어서 작업**하려면 → [다른_PC_셋업.md](다른_PC_셋업.md) (클론 + `npm install` + `clasp login` 정리)
+
 배포 후 생성되는 `https://script.google.com/macros/s/.../exec` 주소가 스코어보드 화면입니다.
 화면의 **결과 저장 → 구글 시트로 전송**을 누르면 배포 계정에 자동 생성된
 `야구 스코어보드 경기기록` 스프레드시트에 경기요약·타자기록이 누적 저장됩니다.
