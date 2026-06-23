@@ -421,7 +421,7 @@ const { useState, useEffect, useRef } = React;
       // 자동 종료(끝내기/정규)는 그 종료를 유발한 플레이를 함께 되돌려야 다시 종료되지 않으므로 Undo를 사용.
       // 수동 종료는 게임 상태를 바꾸지 않았으니 잠금만 해제.
       const cancelGameEnd = () => {
-        if (endReason === 'manual' || history.length === 0) {
+        if (endReason === 'manual' || endReason === 'nosave' || history.length === 0) {
           setGameOver(false);
           setEndReason(null);
           return;
@@ -449,12 +449,13 @@ const { useState, useEffect, useRef } = React;
         if (gameOver) return;
         showConfirm(
           "결과를 구글 시트에 저장하지 않고 경기를 종료할까요?\n액션 패널이 잠기며, 필요하면 나중에 [📤 결과 저장]으로 직접 보낼 수 있습니다.",
-          () => { setGameOver(true); setEndReason('manual'); }
+          () => { setGameOver(true); setEndReason('nosave'); }
         );
       };
 
-      // 새 경기 시작: 이번 경기 기록을 전체(누적: seasonXxx)에 합산한 뒤 경기 상태를 초기화.
-      const startNewGame = () => {
+      // 새 경기 시작: 이번 경기 기록을 전체(누적: seasonXxx)에 합산(accumulate)한 뒤 경기 상태를 초기화.
+      // accumulate=false면 이번 기록을 누적에 반영하지 않고 버린다('저장 없이 종료' 후 새 경기 등).
+      const startNewGame = (accumulate = true) => {
         const foldTeam = (prev) => ({
           ...prev,
           scores: Array(maxInnings).fill(0),
@@ -464,9 +465,9 @@ const { useState, useEffect, useRef } = React;
           currentBatter: 0,
           lineup: prev.lineup.map((b) => ({
             ...b,
-            seasonAtBats: b.seasonAtBats + b.atBats,
-            seasonHits: b.seasonHits + b.hits,
-            seasonRbi: b.seasonRbi + b.rbi,
+            seasonAtBats: b.seasonAtBats + (accumulate ? b.atBats : 0),
+            seasonHits: b.seasonHits + (accumulate ? b.hits : 0),
+            seasonRbi: b.seasonRbi + (accumulate ? b.rbi : 0),
             atBats: 0,
             hits: 0,
             rbi: 0,
@@ -487,10 +488,17 @@ const { useState, useEffect, useRef } = React;
       };
 
       const resetGame = () => {
-        showConfirm(
-          "이번 경기 기록을 전체(누적)에 반영하고 새 경기를 시작할까요?",
-          startNewGame
-        );
+        if (endReason === 'nosave') {
+          showConfirm(
+            "이번 경기는 '저장 없이 종료'됐습니다.\n기록을 전체(누적)에 반영하지 않고 새 경기를 시작할까요?",
+            () => startNewGame(false)
+          );
+        } else {
+          showConfirm(
+            "이번 경기 기록을 전체(누적)에 반영하고 새 경기를 시작할까요?",
+            () => startNewGame(true)
+          );
+        }
       };
 
       // --- 진행 중 경기 자동저장 / 이어하기 ---
@@ -1007,12 +1015,17 @@ const { useState, useEffect, useRef } = React;
                 const winner = a === h ? null : (a > h ? awayTeam.name : homeTeam.name);
                 const head = endReason === 'walkoff'
                   ? `🎉 끝내기! ${homeTeam.name} 승리`
-                  : winner
-                    ? `🏁 경기 종료 — ${winner} 승리 (${a} : ${h})`
-                    : `🏁 경기가 종료되었습니다`;
+                  : endReason === 'nosave'
+                    ? `🚫 저장 없이 종료됨${winner ? ` — ${winner} 승리 (${a} : ${h})` : ` (${a} : ${h})`}`
+                    : winner
+                      ? `🏁 경기 종료 — ${winner} 승리 (${a} : ${h})`
+                      : `🏁 경기가 종료되었습니다`;
+                const tail = endReason === 'nosave'
+                  ? '[＋ 새 경기]를 누르면 이번 기록은 누적에 반영하지 않고 새 경기를 시작합니다. 그래도 저장하려면 [📤 결과 저장]을 사용하세요.'
+                  : '기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다.';
                 return (
                   <div className="mb-4 bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-xl text-sm font-medium">
-                    {head}. 기록은 [📤 결과 저장]으로 저장하고, [＋ 새 경기]를 누르면 이번 기록이 전체(누적)에 반영됩니다. 잘못 종료됐다면 [↩ 종료 취소]로 직전 상황으로 되돌릴 수 있습니다.
+                    {head}. {tail} 잘못 종료됐다면 [↩ 종료 취소]로 직전 상황으로 되돌릴 수 있습니다.
                   </div>
                 );
               })()}
