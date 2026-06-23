@@ -388,6 +388,16 @@ const { useState, useEffect, useRef } = React;
         updateStats(1, false, false);
       };
 
+      // 수동 득점 -1 (현재 공격 팀, 현재 이닝에서 차감) — 자동 득점 정정용.
+      // 예) 3루 주자가 안타에 자동 득점 처리됐으나 실제로는 홈에서 막힌 경우 → 점수 내리고 3루 주자 복귀(토글).
+      const subtractManualRun = () => {
+        const team = isTop ? awayTeam : homeTeam;
+        // 현재 이닝 칸이나 총득점이 0이면 내릴 점수가 없음
+        if ((team.runs || 0) <= 0 || (team.scores[inning - 1] || 0) <= 0) return;
+        saveHistory();
+        updateStats(-1, false, false);
+      };
+
       const handleUndo = () => {
         if (history.length === 0) return;
         const lastState = history[history.length - 1];
@@ -1085,13 +1095,14 @@ const { useState, useEffect, useRef } = React;
               {/* 주자 / 득점 수동 조정 (RUNNERS) */}
               <div className="mt-5 pt-5 border-t border-gray-700">
                 <div className="text-sm text-gray-400 mb-3 font-semibold tracking-wider">주자 / 득점 수동 조정 (RUNNERS)</div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   <button onClick={() => toggleBase('first')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.first ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>1루 주자</button>
                   <button onClick={() => toggleBase('second')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.second ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>2루 주자</button>
                   <button onClick={() => toggleBase('third')} className={`py-3 px-3 font-bold rounded-xl border transition-colors text-sm ${bases.third ? 'bg-yellow-500 text-gray-900 border-yellow-400 shadow-[0_0_10px_#eab308]' : 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-500'}`}>3루 주자</button>
                   <button onClick={addManualRun} className="py-3 px-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl border border-amber-500 transition-colors text-sm">득점 +1</button>
+                  <button onClick={subtractManualRun} className="py-3 px-3 bg-slate-700 hover:bg-slate-600 text-amber-200 font-bold rounded-xl border border-slate-500 transition-colors text-sm">득점 -1</button>
                 </div>
-                <p className="text-xs text-gray-500 mt-3 leading-relaxed">💡 도루·폭투·견제사·태그업 등은 베이스 주자를 직접 켜고/끄고, 득점이 나면 [득점 +1]로 반영하세요. 모든 동작은 되돌리기(Undo)로 취소됩니다.</p>
+                <p className="text-xs text-gray-500 mt-3 leading-relaxed">💡 도루·폭투·견제사·태그업 등은 베이스 주자를 직접 켜고/끄고, 득점이 나면 [득점 +1]로 반영하세요. 자동으로 득점 처리됐지만 실제로는 홈에서 막힌 경우(예: 3루 주자가 내야안타에 홈을 못 밟음)엔 <b className="text-gray-300">[득점 -1]</b>로 점수를 내리고 <b className="text-gray-300">[3루 주자]</b>를 다시 켜 복귀시키세요. 모든 동작은 되돌리기(Undo)로 취소됩니다.</p>
               </div>
               </div>
             </div>
