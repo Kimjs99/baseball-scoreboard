@@ -55,7 +55,7 @@ clasp open-web-app          # 배포된 앱 열기
 
 | 구분 | URL / ID | 비고 |
 |---|---|---|
-| 웹앱 (버전 배포, **공유·기록용**) | `https://script.google.com/macros/s/AKfycbwm3qR95v8sA6q6zMFzaLKOi78R1cldZNc__1V8eUkXG5-8s_0t_qVaeEaD5ZWV6WGm/exec` | 배포 ID `AKfycbwm3qR9...`, 현재 버전 `@11`. URL 고정. **익명 접근 가능 → 결과 저장은 이 URL에서만 동작** |
+| 웹앱 (버전 배포, **공유·기록용**) | `https://script.google.com/macros/s/AKfycbwm3qR95v8sA6q6zMFzaLKOi78R1cldZNc__1V8eUkXG5-8s_0t_qVaeEaD5ZWV6WGm/exec` | 배포 ID `AKfycbwm3qR9...`, 현재 버전 `@13`. URL 고정. **익명 접근 가능 → 결과 저장은 이 URL에서만 동작** |
 | 웹앱 (`@HEAD`, 개발/테스트용) | `https://script.google.com/macros/s/AKfycbwV0kZpbbfyEZq42cdlguCym84ATMCzEEnP7oRhf5Q/exec` | 배포 ID `AKfycbwV0...`, `clasp push` 시 최신 코드 자동 반영. ⚠️ **로그인 필수(익명 불가) → 결과 저장 안 됨**(no-cors라 실패해도 "전송 완료"로 보임). 화면 확인 전용 |
 | 결과 저장 구글 시트 | `https://docs.google.com/spreadsheets/d/1icZKDgE0YS--CebK1v7nhvERZVkXhFGzQUAwXZkK0ZQ/edit` | 파일명 `야구 스코어보드 경기기록`. Script Properties `RESULT_SPREADSHEET_ID`에 캐시 |
 | Apps Script 스크립트 ID | `15qf7wDFkRgNi_wIR-iTw401u6HQQLC6fV_XiVLwjbYZaAaXyMjU8Jy35` | `.clasp.json` 참조 |
