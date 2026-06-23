@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.1] - 2026-06-23 · 공유 배포 `@14`
+
+### 🐛 Bug Fixes
+- '저장 없이 종료'한 경기는 새 경기 시작 시 누적(season) 미반영 — 종료 사유를 `nosave`로 구분하고 `startNewGame(accumulate)` 파라미터 추가, `resetGame`이 nosave면 "누적에 반영하지 않고 새 경기를 시작할까요?"로 확인 후 이번 기록을 폐기. 종료 배너·종료 취소도 nosave 처리 (a4d1779)
+
+### 📝 Documentation
+- 공유 배포 버전 표기 `@13` → `@14` 갱신 (README·CHANGELOG)
+
 ## [v0.7.0] - 2026-06-23 · 공유 배포 `@13`
 
 ### ✨ Features
