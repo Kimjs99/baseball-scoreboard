@@ -29,6 +29,9 @@ const { useState, useEffect, useRef } = React;
       }));
     };
 
+    // 빈 베이스(주자 없음) 상태. 호출마다 새 객체를 반환하므로 누산용으로도 안전하게 쓸 수 있다.
+    const emptyBases = () => ({ first: false, second: false, third: false });
+
     // 진행 중 경기 자동저장 키(localStorage). v 접미사로 스키마 변경 시 무효화.
     const AUTOSAVE_KEY = 'baseball-scoreboard:autosave:v1';
 
@@ -77,7 +80,7 @@ const { useState, useEffect, useRef } = React;
       const [balls, setBalls] = useState(0);
       const [strikes, setStrikes] = useState(0);
       const [outs, setOuts] = useState(0);
-      const [bases, setBases] = useState({ first: false, second: false, third: false });
+      const [bases, setBases] = useState(emptyBases());
 
       // 병살(더블플레이) 주자 선택 모드 (true면 어느 주자를 아웃시킬지 고르는 버튼 노출)
       const [dpMode, setDpMode] = useState(false);
@@ -176,7 +179,7 @@ const { useState, useEffect, useRef } = React;
       };
 
       const switchInning = () => {
-        setBases({ first: false, second: false, third: false });
+        setBases(emptyBases());
         setBalls(0);
         setStrikes(0);
         setOuts(0);
@@ -238,13 +241,19 @@ const { useState, useEffect, useRef } = React;
         return { nb, runsScored };
       };
 
+      // 1루 진루권(4구 볼넷·직접 볼넷·사구) 부여 시 강제 진루 적용.
+      // 호출자가 saveHistory()를 담당하므로 여기서는 상태 변경만 한다.
+      const applyWalk = () => {
+        const { nb, runsScored } = computeForcedWalk(bases);
+        setBases(nb);
+        updateStats(runsScored, false, false, runsScored); // 만루 밀어내기 득점은 타점
+        advanceBatter();
+      };
+
       const handleBall = () => {
         saveHistory();
         if (balls + 1 === 4) {
-          const { nb, runsScored } = computeForcedWalk(bases);
-          setBases(nb);
-          updateStats(runsScored, false, false, runsScored); // 만루 밀어내기 득점은 타점
-          advanceBatter();
+          applyWalk();
         } else {
           setBalls(balls + 1);
         }
@@ -309,10 +318,7 @@ const { useState, useEffect, useRef } = React;
       // 볼넷(직접)·사구(몸에 맞는 공): 1루 진루권 부여, 타수·안타 모두 제외
       const handleWalkLike = () => {
         saveHistory();
-        const { nb, runsScored } = computeForcedWalk(bases);
-        setBases(nb);
-        updateStats(runsScored, false, false, runsScored); // 만루 밀어내기 득점은 타점
-        advanceBatter();
+        applyWalk();
       };
 
       // 실책 출루(ROE): 타수 포함·안타 제외, 수비팀 실책(E) +1
@@ -347,7 +353,7 @@ const { useState, useEffect, useRef } = React;
       const handleSacBunt = () => {
         saveHistory();
         let runsScored = 0;
-        const nb = { first: false, second: false, third: false };
+        const nb = emptyBases();
         if (bases.third) runsScored += 1;
         if (bases.second) nb.third = true;
         if (bases.first) nb.second = true;
@@ -478,7 +484,7 @@ const { useState, useEffect, useRef } = React;
         setBalls(0);
         setStrikes(0);
         setOuts(0);
-        setBases({ first: false, second: false, third: false });
+        setBases(emptyBases());
         setAwayTeam(foldTeam);
         setHomeTeam(foldTeam);
         setHistory([]);
@@ -539,7 +545,7 @@ const { useState, useEffect, useRef } = React;
         setBalls(s.balls || 0);
         setStrikes(s.strikes || 0);
         setOuts(s.outs || 0);
-        setBases(s.bases || { first: false, second: false, third: false });
+        setBases(s.bases || emptyBases());
         if (s.awayTeam) setAwayTeam(s.awayTeam);
         if (s.homeTeam) setHomeTeam(s.homeTeam);
         setMaxInnings(s.maxInnings || 9);
@@ -1185,6 +1191,12 @@ const { useState, useEffect, useRef } = React;
               )}
             </div>
             )}
+
+            {/* 푸터: 저작권 · 버전 · 사용 제한 */}
+            <footer className="pt-2 pb-1 text-center text-xs text-gray-500 leading-relaxed">
+              <p>© 2026 Kimjs99 · 야구 스코어보드 v0.7.2</p>
+              <p className="mt-1">본 프로그램은 학교 체육 수업용으로 제작되었으며, 학교 체육 수업 외 용도의 사용을 제한합니다.</p>
+            </footer>
 
           </div>
 

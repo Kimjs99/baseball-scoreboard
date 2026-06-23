@@ -44,7 +44,12 @@ Editing flow: change `src/app.jsx` → `npm run build` → `clasp push` → (re)
 
 **No tests, no linter, no formatter** — `build` is the only npm script. Verification is manual (deploy + hard-refresh the `/exec` URL). The build emits an intermediate `build/tw.css` (gitignored); the committed artifact is `apps-script/Index.html`. (Note: the global `test-coverage-optimizer` agent / 80%-coverage convention does not apply to this repo.)
 
-Reference docs (Korean): `README.md` (overview), `사용설명서.md` (end-user manual), `CHANGELOG.md`, `기록용_링크.md` (recording links).
+Reference docs (Korean): `README.md` (overview), `사용설명서.md` (end-user manual), `CHANGELOG.md`, `기록용_링크.md` (recording links), `REFACTORING.md` (refactoring log).
+
+**Record-keeping convention (always follow).** Every refactor or version change must leave a record:
+- **Pure refactor** (no behavior change) → prepend a dated entry to `REFACTORING.md` (target files · summary · why · how behavior-preservation was verified). If `src/app.jsx` changed, state that `npm run build` ran and the built output was checked.
+- **Feature / fix / version bump** → add a `## [vX.Y.Z]` entry to `CHANGELOG.md`. If deployed, also bump the `· 공유 배포 @N` tag and the version note in `기록용_링크.md`.
+- **Always state deployment status** — build-only vs. `clasp push` + `clasp redeploy` done (build alone is never live; see Deployment gotchas).
 
 ## Architecture notes that span files
 

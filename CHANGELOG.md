@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.2] - 2026-06-23 · 공유 배포 `@15`
+
+### ✨ Added
+- 화면 하단에 푸터 추가: 저작권(© 2026 Kimjs99)·버전(v0.7.2) 표기 및 "학교 체육 수업 외 용도 사용 제한" 안내 문구
+
+### ♻️ Refactor
+- 코드 중복 제거(동작 변경 없음): 빈 베이스 리터럴 5곳을 `emptyBases()` 팩토리로 통일, 볼넷·사구·4구 강제진루 로직을 `applyWalk()` 헬퍼로 추출. 상세·검증 내역은 [`REFACTORING.md`](./REFACTORING.md) 참고
+
+### 🚀 Deploy
+- 공유 배포 버전 표기 `@14` → `@15` 갱신 (README·기록용_링크), `clasp push` + `clasp redeploy` 완료 (URL 유지)
+
 ## [v0.7.1] - 2026-06-23 · 공유 배포 `@14`
 
 ### 🐛 Bug Fixes
